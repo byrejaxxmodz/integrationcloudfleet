@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CloudFleet Manager - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #222;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #4b5cc4;
+            font-size: 2.4em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.05em;
+        }
+
+        .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 220px;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+            color: #333;
+            font-size: 0.9em;
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+            background: #fafafa;
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            background: #fff;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            min-width: 120px;
+        }
+
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(102, 126, 234, 0.35);
+        }
+
+        .secondary {
+            background: #6c757d;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .section {
+            background: white;
+            padding: 24px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .section h2 {
+            color: #4b5cc4;
+            margin-bottom: 16px;
+            font-size: 1.6em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .badge {
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 700;
+        }
+
+        .loading,
+        .empty {
+            text-align: center;
+            padding: 35px;
+            color: #666;
+            font-size: 1em;
+        }
+
+        .error {
+            background: #fee;
+            border: 2px solid #fcc;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #f8f9fa;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #e0e0e0;
+            font-size: 0.95em;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 0.95em;
+        }
+
+        tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .status.active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .rol-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .rol-badge.conductor {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .rol-badge.auxiliar {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 18px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.1em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.95em;
+            opacity: 0.92;
+        }
+
+        @media (max-width: 768px) {
+            .filters {
+                flex-direction: column;
+            }
+
+            .filter-group {
+                width: 100%;
+            }
+
+            .actions {
+                width: 100%;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>CloudFleet Manager</h1>
+            <p class="subtitle">Filtra por cliente, ciudad y rol para ver vehiculos, conductores y rutas</p>
+        </header>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label for="filterCliente">Cliente</label>
+                <select id="filterCliente">
+                    <option value="">Cargando clientes...</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filterCiudad">Ciudad (vehiculos y personal)</label>
+                <input type="text" id="filterCiudad" placeholder="Ej: Bogota">
+            </div>
+
+            <div class="filter-group">
+                <label for="filterRol">Rol del personal</label>
+                <select id="filterRol">
+                    <option value="">Todos</option>
+                    <option value="conductor">Conductores</option>
+                    <option value="auxiliar">Auxiliares</option>
+                </select>
+            </div>
+
+            <div class="actions">
+                <button onclick="aplicarFiltros()">Buscar</button>
+                <button class="secondary" onclick="limpiarFiltros()">Limpiar</button>
+            </div>
+        </div>
+
+        <div class="stats" id="stats"></div>
+
+        <div class="grid">
+            <div class="section">
+                <h2>
+                    Vehiculos
+                    <span class="badge" id="vehiculosCount">0</span>
+                </h2>
+                <div id="vehiculosContent">
+                    <div class="loading">Cargando vehiculos...</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>
+                    Personal
+                    <span class="badge" id="personalCount">0</span>
+                </h2>
+                <div id="personalContent">
+                    <div class="loading">Cargando personal...</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>
+                    Rutas
+                    <span class="badge" id="rutasCount">0</span>
+                </h2>
+                <div id="rutasContent">
+                    <div class="loading">Cargando rutas...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8003';
+        let clientesData = [];
+        let vehiculosData = [];
+        let personalData = [];
+        let rutasData = [];
+
+        const buildQuery = (params) => {
+            const entries = Object.entries(params)
+                .filter(([, value]) => value !== undefined && value !== null && value !== '');
+            if (!entries.length) return '';
+            return '?' + entries
+                .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+                .join('&');
+        };
+
+        async function inicializar() {
+            await cargarClientes();
+            await cargarDatos();
+        }
+
+        async function cargarClientes() {
+            const select = document.getElementById('filterCliente');
+            try {
+                const response = await fetch(`${API_BASE}/clientes`);
+                if (!response.ok) throw new Error('No se pudieron cargar los clientes');
+                clientesData = await response.json();
+
+                select.innerHTML = '';
+                const optionAll = document.createElement('option');
+                optionAll.value = '';
+                optionAll.textContent = 'Todos los clientes';
+                select.appendChild(optionAll);
+
+                clientesData.forEach((c) => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = c.nombre || `Cliente ${c.id}`;
+                    select.appendChild(opt);
+                });
+            } catch (error) {
+                console.error(error);
+                select.innerHTML = '<option value=\"\">Error al cargar clientes</option>';
+            }
+        }
+
+        async function cargarDatos() {
+            const clienteId = document.getElementById('filterCliente').value;
+            const ciudad = document.getElementById('filterCiudad').value.trim();
+            const rol = document.getElementById('filterRol').value;
+
+            await Promise.all([
+                cargarVehiculos({ clienteId, ciudad }),
+                cargarPersonal({ clienteId, ciudad, rol }),
+                cargarRutas({ clienteId }),
+            ]);
+
+            actualizarEstadisticas();
+        }
+
+        async function cargarVehiculos({ clienteId = '', ciudad = '' } = {}) {
+            try {
+                const url = `${API_BASE}/vehiculos${buildQuery({
+                    cliente_id: clienteId,
+                    ciudad: ciudad || undefined,
+                })}`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Error al cargar vehiculos');
+
+                vehiculosData = await response.json();
+                document.getElementById('vehiculosCount').textContent = vehiculosData.length;
+
+                const content = document.getElementById('vehiculosContent');
+                if (!vehiculosData.length) {
+                    content.innerHTML = '<div class="empty">No se encontraron vehiculos</div>';
+                    return;
+                }
+
+                const html = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Placa</th>
+                                <th>Tipo</th>
+                                <th>Ciudad</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${vehiculosData.map(v => `
+                                <tr>
+                                    <td><strong>${v.placa || 'N/A'}</strong></td>
+                                    <td>${v.datos_adicionales?.typeName || v.tipo || 'N/A'}</td>
+                                    <td>${v.ubicacion_ciudad || 'No especificada'}</td>
+                                    <td>
+                                        <span class="status ${v.activo ? 'active' : 'inactive'}">
+                                            ${v.activo ? 'Activo' : 'Inactivo'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+
+                content.innerHTML = html;
+            } catch (error) {
+                vehiculosData = [];
+                document.getElementById('vehiculosCount').textContent = '0';
+                document.getElementById('vehiculosContent').innerHTML =
+                    `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function cargarPersonal({ clienteId = '', ciudad = '', rol = '' } = {}) {
+            try {
+                const url = `${API_BASE}/personal${buildQuery({
+                    cliente_id: clienteId,
+                    ciudad: ciudad || undefined,
+                    rol: rol || undefined,
+                })}`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Error al cargar personal');
+
+                personalData = await response.json();
+                document.getElementById('personalCount').textContent = personalData.length;
+
+                const content = document.getElementById('personalContent');
+                if (!personalData.length) {
+                    content.innerHTML = '<div class="empty">No se encontro personal con los filtros</div>';
+                    return;
+                }
+
+                const html = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Rol</th>
+                                <th>Documento</th>
+                                <th>Ciudad</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${personalData.map(p => {
+                                const rolLabel = (p.rol || '').toLowerCase().includes('auxiliar') ? 'Auxiliar' : 'Conductor';
+                                return `
+                                    <tr>
+                                        <td><strong>${p.nombre || 'Sin nombre'}</strong></td>
+                                        <td>
+                                            <span class="rol-badge ${rolLabel.toLowerCase()}">${rolLabel}</span>
+                                        </td>
+                                        <td>${p.documento || p.datos_adicionales?.personalId || 'N/A'}</td>
+                                        <td>${p.ubicacion_ciudad || 'No especificada'}</td>
+                                        <td>
+                                            <span class="status ${p.activo ? 'active' : 'inactive'}">
+                                                ${p.activo ? 'Activo' : 'Inactivo'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
+
+                content.innerHTML = html;
+            } catch (error) {
+                personalData = [];
+                document.getElementById('personalCount').textContent = '0';
+                document.getElementById('personalContent').innerHTML =
+                    `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function cargarRutas({ clienteId = '' } = {}) {
+            try {
+                const url = `${API_BASE}/rutas${buildQuery({ cliente_id: clienteId })}`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Error al cargar rutas');
+
+                rutasData = await response.json();
+                document.getElementById('rutasCount').textContent = rutasData.length;
+
+                const content = document.getElementById('rutasContent');
+                if (!rutasData.length) {
+                    content.innerHTML = '<div class="empty">No se encontraron rutas</div>';
+                    return;
+                }
+
+                const html = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Codigo</th>
+                                <th>Nombre</th>
+                                <th>Origen</th>
+                                <th>Destino</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rutasData.map(r => `
+                                <tr>
+                                    <td><strong>${r.codigo || 'SIN-COD'}</strong></td>
+                                    <td>${r.nombre || 'Sin nombre'}</td>
+                                    <td>${r.origen || 'N/D'}</td>
+                                    <td>${r.destino || 'N/D'}</td>
+                                    <td>
+                                        <span class="status ${r.activa === false ? 'inactive' : 'active'}">
+                                            ${r.activa === false ? 'Inactiva' : 'Activa'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+
+                content.innerHTML = html;
+            } catch (error) {
+                rutasData = [];
+                document.getElementById('rutasCount').textContent = '0';
+                document.getElementById('rutasContent').innerHTML =
+                    `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        function actualizarEstadisticas() {
+            const conductores = personalData.filter(p => (p.rol || '').toLowerCase().includes('conductor')).length;
+            const auxiliares = personalData.filter(p => (p.rol || '').toLowerCase().includes('auxiliar')).length;
+            const vehiculosActivos = vehiculosData.filter(v => v.activo).length;
+            const personalActivo = personalData.filter(p => p.activo).length;
+            const rutasActivas = rutasData.filter(r => r.activa !== false).length;
+
+            const html = `
+                <div class="stat-card">
+                    <div class="stat-number">${vehiculosData.length}</div>
+                    <div class="stat-label">Vehiculos totales</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${vehiculosActivos}</div>
+                    <div class="stat-label">Vehiculos activos</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${conductores}</div>
+                    <div class="stat-label">Conductores</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${auxiliares}</div>
+                    <div class="stat-label">Auxiliares</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${personalActivo}</div>
+                    <div class="stat-label">Personal activo</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${rutasActivas}/${rutasData.length}</div>
+                    <div class="stat-label">Rutas activas / totales</div>
+                </div>
+            `;
+
+            document.getElementById('stats').innerHTML = html;
+        }
+
+        function aplicarFiltros() {
+            cargarDatos();
+        }
+
+        function limpiarFiltros() {
+            document.getElementById('filterCliente').value = '';
+            document.getElementById('filterCiudad').value = '';
+            document.getElementById('filterRol').value = '';
+            cargarDatos();
+        }
+
+        window.addEventListener('load', inicializar);
+    </script>
+</body>
+</html>

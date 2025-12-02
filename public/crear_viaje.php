@@ -7,6 +7,7 @@ require_once __DIR__ . '/../services/scheduler_api.php';
 $pdo = getPDO();
 $mensaje = '';
 $error = '';
+$resultadoApi = [];
 
 function obtenerClientes(PDO $pdo): array {
     $stmt = $pdo->query('SELECT id, nombre FROM clientes ORDER BY nombre');
@@ -41,6 +42,7 @@ try {
 
         // Llamamos al microservicio para obtener asignaciones sugeridas
         $asignaciones = llamarScheduler($payload);
+        $resultadoApi = $asignaciones; // Para mostrar en pantalla qué devolvió el scheduler
 
         $pdo->beginTransaction();
         $stmtViaje = $pdo->prepare('INSERT INTO viajes (cliente_id, sede_id, fecha, estado) VALUES (?, ?, ?, "borrador")');
@@ -89,6 +91,32 @@ try {
 
     <?php if ($error): ?>
         <p style="color:red;">Error: <?= htmlspecialchars($error) ?></p>
+    <?php endif; ?>
+
+    <?php if (!empty($resultadoApi)): ?>
+        <h2>Respuesta del scheduler</h2>
+        <table border="1" cellpadding="5" cellspacing="0">
+            <thead>
+                <tr>
+                    <th>Ruta</th>
+                    <th>Vehículo</th>
+                    <th>Conductor</th>
+                    <th>Auxiliar</th>
+                    <th>Notas</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($resultadoApi as $a): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($a['ruta_id'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($a['vehiculo_id'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($a['conductor_id'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($a['auxiliar_id'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($a['notas'] ?? '') ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
     <?php endif; ?>
 
     <form method="post">
