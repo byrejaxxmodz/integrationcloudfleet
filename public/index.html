@@ -50,9 +50,8 @@
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
             margin-bottom: 30px;
             display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-            align-items: flex-end;
+            flex-direction: column;
+            gap: 12px;
         }
 
         .filter-group {
@@ -91,6 +90,27 @@
             flex-wrap: wrap;
         }
 
+        .filters-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 15px;
+            align-items: end;
+        }
+
+        .filter-inline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            color: #333;
+            margin-top: 6px;
+        }
+
+        .hint {
+            font-size: 0.85em;
+            color: #555;
+        }
+
         button {
             background: #667eea;
             color: white;
@@ -119,6 +139,7 @@
             grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
             gap: 25px;
             margin-bottom: 30px;
+            align-items: stretch;
         }
 
         .section {
@@ -126,6 +147,9 @@
             padding: 24px;
             border-radius: 15px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            min-height: 360px;
         }
 
         .section h2 {
@@ -154,6 +178,29 @@
             font-size: 1em;
         }
 
+        .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 30px 0;
+            color: #555;
+        }
+
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid #dfe3ff;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
         .error {
             background: #fee;
             border: 2px solid #fcc;
@@ -166,6 +213,11 @@
         table {
             width: 100%;
             border-collapse: collapse;
+        }
+
+        .table-container {
+            flex: 1;
+            overflow: auto;
         }
 
         thead {
@@ -227,11 +279,40 @@
             color: #155724;
         }
 
+        .vias-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            max-width: 320px;
+        }
+
+        .via-pill {
+            background: #eef2ff;
+            color: #27305a;
+            border: 1px solid #d9defc;
+            border-radius: 10px;
+            padding: 6px 10px;
+            font-size: 0.9em;
+            line-height: 1.2;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .via-pill .via-code {
+            font-weight: 700;
+            margin-right: 4px;
+        }
+
+        .via-pill .via-name {
+            font-size: 0.85em;
+            color: #3e4a6b;
+        }
+
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
             gap: 15px;
             margin-bottom: 20px;
+            align-items: stretch;
         }
 
         .stat-card {
@@ -280,29 +361,46 @@
         </header>
 
         <div class="filters">
-            <div class="filter-group">
-                <label for="filterCliente">Cliente</label>
-                <select id="filterCliente">
-                    <option value="">Cargando clientes...</option>
-                </select>
-            </div>
+            <div class="filters-row">
+                <div class="filter-group">
+                    <label for="filterCliente">Cliente</label>
+                    <select id="filterCliente">
+                        <option value="">Cargando clientes...</option>
+                    </select>
+                </div>
 
-            <div class="filter-group">
-                <label for="filterCiudad">Ciudad (vehiculos y personal)</label>
-                <input type="text" id="filterCiudad" placeholder="Ej: Bogota">
-            </div>
+                <div class="filter-group">
+                    <label for="filterCiudad">Ciudad (vehiculos y personal)</label>
+                    <input type="text" id="filterCiudad" placeholder="Ej: Bogota">
+                </div>
 
-            <div class="filter-group">
-                <label for="filterRol">Rol del personal</label>
-                <select id="filterRol">
-                    <option value="">Todos</option>
-                    <option value="conductor">Conductores</option>
-                    <option value="auxiliar">Auxiliares</option>
-                </select>
+                <div class="filter-group">
+                    <label for="filterRol">Rol del personal</label>
+                    <select id="filterRol">
+                        <option value="">Todos</option>
+                        <option value="conductor">Conductores</option>
+                        <option value="auxiliar">Auxiliares</option>
+                    </select>
+                    <label class="filter-inline">
+                        <input type="checkbox" id="filterSoloActivos" checked>
+                        Solo personal activo
+                    </label>
+                </div>
             </div>
-
+            <div class="filters-row">
+                <div class="filter-group">
+                    <label for="filterRouteCode">Código de ruta (sugerido)</label>
+                    <input type="text" id="filterRouteCode" placeholder="Ej: CHL-YUM-VAR">
+                    <span class="hint">Se arma con cliente + ciudad y el sufijo VAR.</span>
+                </div>
+                <div class="filter-group">
+                    <label for="filterViaCode">Vía (viaCode)</label>
+                    <input type="text" id="filterViaCode" placeholder="Ej: RYP">
+                    <span class="hint">Opcional: usa viaCode para reducir los viajes.</span>
+                </div>
+            </div>
             <div class="actions">
-                <button onclick="aplicarFiltros()">Buscar</button>
+                <button id="btnBuscar" onclick="aplicarFiltros()">Buscar</button>
                 <button class="secondary" onclick="limpiarFiltros()">Limpiar</button>
             </div>
         </div>
@@ -348,6 +446,23 @@
         let vehiculosData = [];
         let personalData = [];
         let rutasData = [];
+        let soloActivos = true;
+        let isLoading = false;
+
+        function setLoading(flag) {
+            isLoading = flag;
+            const btnBuscar = document.getElementById('btnBuscar');
+            if (btnBuscar) {
+                btnBuscar.disabled = flag;
+                btnBuscar.textContent = flag ? 'Cargando...' : 'Buscar';
+            }
+            if (flag) {
+                const loadingHtml = `<div class="loading-state"><div class="spinner"></div><div>Cargando datos...</div></div>`;
+                document.getElementById('vehiculosContent').innerHTML = loadingHtml;
+                document.getElementById('personalContent').innerHTML = loadingHtml;
+                document.getElementById('rutasContent').innerHTML = loadingHtml;
+            }
+        }
 
         const buildQuery = (params) => {
             const entries = Object.entries(params)
@@ -358,9 +473,74 @@
                 .join('&');
         };
 
+        const VOWELS = 'AEIOUÁÉÍÓÚÜ';
+
+        const abbrCandidates = (text, length = 3) => {
+            if (!text) return [];
+            const chars = (text.toUpperCase().match(/[A-ZÁÉÍÓÚÜÑ]/g) || []);
+            if (!chars.length) return [];
+            const simple = chars.join('').slice(0, length);
+            const consonants = chars.filter(c => !VOWELS.includes(c)).join('').slice(0, length);
+            const opts = [];
+            [consonants, simple].forEach(c => {
+                const trimmed = c.slice(0, length);
+                if (trimmed && !opts.includes(trimmed)) opts.push(trimmed);
+            });
+            return opts;
+        };
+
+        const buildRouteCode = (clienteId, ciudad) => {
+            if (!ciudad) return '';
+            const cityAbbr = abbrCandidates(ciudad)[0];
+            if (!cityAbbr) return '';
+            let clientAbbr = '';
+            if (clienteId) {
+                const cli = clientesData.find(c => `${c.id}` === `${clienteId}`);
+                const nombre = cli?.nombre || `${clienteId}`;
+                clientAbbr = abbrCandidates(nombre)[0] || '';
+            }
+            const prefix = clientAbbr ? `${clientAbbr}-${cityAbbr}` : cityAbbr;
+            return `${prefix}-VAR`.toUpperCase();
+        };
+
+        const normalizeRouteCode = (code) => {
+            if (!code) return '';
+            const clean = code.toUpperCase().trim();
+            const parts = clean.split('-').filter(Boolean);
+            if (parts.length === 2) {
+                return `${parts[0]}-${parts[1]}-VAR`;
+            }
+            return clean;
+        };
+
+        function sugerirRouteCode() {
+            const clienteId = document.getElementById('filterCliente').value;
+            const ciudad = document.getElementById('filterCiudad').value.trim();
+            const input = document.getElementById('filterRouteCode');
+            const autoCode = buildRouteCode(clienteId, ciudad);
+            input.placeholder = autoCode || 'Ej: CHL-YUM-VAR';
+            if (!input.value || input.dataset.auto === 'true') {
+                input.value = autoCode;
+                input.dataset.auto = 'true';
+            }
+        }
+
         async function inicializar() {
+            document.getElementById('filterCliente').addEventListener('change', sugerirRouteCode);
+            document.getElementById('filterCiudad').addEventListener('input', sugerirRouteCode);
+            document.getElementById('filterRouteCode').addEventListener('input', () => {
+                document.getElementById('filterRouteCode').dataset.auto = 'false';
+            });
+            document.getElementById('filterViaCode').addEventListener('input', () => {
+                const viaInput = document.getElementById('filterViaCode');
+                viaInput.value = viaInput.value.toUpperCase();
+            });
             await cargarClientes();
-            await cargarDatos();
+            sugerirRouteCode();
+            // No cargamos datos pesados hasta que el usuario aplique filtros.
+            document.getElementById('vehiculosContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
+            document.getElementById('personalContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
+            document.getElementById('rutasContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
         }
 
         async function cargarClientes() {
@@ -389,17 +569,33 @@
         }
 
         async function cargarDatos() {
+            setLoading(true);
             const clienteId = document.getElementById('filterCliente').value;
             const ciudad = document.getElementById('filterCiudad').value.trim();
             const rol = document.getElementById('filterRol').value;
+            soloActivos = document.getElementById('filterSoloActivos').checked;
+            const routeCodeInput = document.getElementById('filterRouteCode');
+            const viaCodeInput = document.getElementById('filterViaCode');
+            const autoRouteCode = buildRouteCode(clienteId, ciudad);
+            const routeCode = normalizeRouteCode(routeCodeInput.value || autoRouteCode || '');
+            if (!routeCodeInput.value && autoRouteCode) {
+                routeCodeInput.value = autoRouteCode;
+                routeCodeInput.dataset.auto = 'true';
+            } else if (routeCode && routeCodeInput.value) {
+                routeCodeInput.value = routeCode;
+            }
+            const viaCode = viaCodeInput.value.trim().toUpperCase();
 
-            await Promise.all([
-                cargarVehiculos({ clienteId, ciudad }),
-                cargarPersonal({ clienteId, ciudad, rol }),
-                cargarRutas({ clienteId }),
-            ]);
-
-            actualizarEstadisticas();
+            try {
+                await Promise.all([
+                    cargarVehiculos({ clienteId, ciudad }),
+                    cargarPersonal({ clienteId, ciudad, rol, soloActivos }),
+                    cargarRutas({ clienteId, ciudad, routeCode, viaCode }),
+                ]);
+                actualizarEstadisticas();
+            } finally {
+                setLoading(false);
+            }
         }
 
         async function cargarVehiculos({ clienteId = '', ciudad = '' } = {}) {
@@ -421,30 +617,32 @@
                 }
 
                 const html = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Placa</th>
-                                <th>Tipo</th>
-                                <th>Ciudad</th>
-                                <th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${vehiculosData.map(v => `
+                    <div class="table-container">
+                        <table>
+                            <thead>
                                 <tr>
-                                    <td><strong>${v.placa || 'N/A'}</strong></td>
-                                    <td>${v.datos_adicionales?.typeName || v.tipo || 'N/A'}</td>
-                                    <td>${v.ubicacion_ciudad || 'No especificada'}</td>
-                                    <td>
-                                        <span class="status ${v.activo ? 'active' : 'inactive'}">
-                                            ${v.activo ? 'Activo' : 'Inactivo'}
-                                        </span>
-                                    </td>
+                                    <th>Placa</th>
+                                    <th>Tipo</th>
+                                    <th>Ciudad</th>
+                                    <th>Estado</th>
                                 </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                ${vehiculosData.map(v => `
+                                    <tr>
+                                        <td><strong>${v.placa || 'N/A'}</strong></td>
+                                        <td>${v.datos_adicionales?.typeName || v.tipo || 'N/A'}</td>
+                                        <td>${v.ubicacion_ciudad || 'No especificada'}</td>
+                                        <td>
+                                            <span class="status ${v.activo ? 'active' : 'inactive'}">
+                                                ${v.activo ? 'Activo' : 'Inactivo'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
                 `;
 
                 content.innerHTML = html;
@@ -456,7 +654,7 @@
             }
         }
 
-        async function cargarPersonal({ clienteId = '', ciudad = '', rol = '' } = {}) {
+        async function cargarPersonal({ clienteId = '', ciudad = '', rol = '', soloActivos = false } = {}) {
             try {
                 const url = `${API_BASE}/personal${buildQuery({
                     cliente_id: clienteId,
@@ -467,6 +665,13 @@
                 if (!response.ok) throw new Error('Error al cargar personal');
 
                 personalData = await response.json();
+                // Filtro defensivo en front por si la API devuelve más datos de los solicitados
+                personalData = personalData.filter(p => {
+                    const activoOk = !soloActivos || p.activo !== false;
+                    const rolOk = !rol || (p.rol || '').toLowerCase().includes(rol.toLowerCase());
+                    const ciudadOk = !ciudad || (p.ubicacion_ciudad || '').toLowerCase().includes(ciudad.toLowerCase());
+                    return activoOk && rolOk && ciudadOk;
+                });
                 document.getElementById('personalCount').textContent = personalData.length;
 
                 const content = document.getElementById('personalContent');
@@ -476,37 +681,39 @@
                 }
 
                 const html = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Nombre</th>
-                                <th>Rol</th>
-                                <th>Documento</th>
-                                <th>Ciudad</th>
-                                <th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${personalData.map(p => {
-                                const rolLabel = (p.rol || '').toLowerCase().includes('auxiliar') ? 'Auxiliar' : 'Conductor';
-                                return `
-                                    <tr>
-                                        <td><strong>${p.nombre || 'Sin nombre'}</strong></td>
-                                        <td>
-                                            <span class="rol-badge ${rolLabel.toLowerCase()}">${rolLabel}</span>
-                                        </td>
-                                        <td>${p.documento || p.datos_adicionales?.personalId || 'N/A'}</td>
-                                        <td>${p.ubicacion_ciudad || 'No especificada'}</td>
-                                        <td>
-                                            <span class="status ${p.activo ? 'active' : 'inactive'}">
-                                                ${p.activo ? 'Activo' : 'Inactivo'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>Rol</th>
+                                    <th>Documento</th>
+                                    <th>Ciudad</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${personalData.map(p => {
+                                    const rolLabel = (p.rol || '').toLowerCase().includes('auxiliar') ? 'Auxiliar' : 'Conductor';
+                                    return `
+                                        <tr>
+                                            <td><strong>${p.nombre || 'Sin nombre'}</strong></td>
+                                            <td>
+                                                <span class="rol-badge ${rolLabel.toLowerCase()}">${rolLabel}</span>
+                                            </td>
+                                            <td>${p.documento || p.datos_adicionales?.personalId || 'N/A'}</td>
+                                            <td>${p.ubicacion_ciudad || 'No especificada'}</td>
+                                            <td>
+                                                <span class="status ${p.activo ? 'active' : 'inactive'}">
+                                                    ${p.activo ? 'Activo' : 'Inactivo'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
                 `;
 
                 content.innerHTML = html;
@@ -518,9 +725,14 @@
             }
         }
 
-        async function cargarRutas({ clienteId = '' } = {}) {
+        async function cargarRutas({ clienteId = '', ciudad = '', routeCode = '', viaCode = '' } = {}) {
             try {
-                const url = `${API_BASE}/rutas${buildQuery({ cliente_id: clienteId })}`;
+                const url = `${API_BASE}/rutas${buildQuery({
+                    cliente_id: clienteId,
+                    ciudad: ciudad || undefined,
+                    route_code: routeCode || undefined,
+                    via_code: viaCode || undefined,
+                })}`;
                 const response = await fetch(url);
                 if (!response.ok) throw new Error('Error al cargar rutas');
 
@@ -534,32 +746,51 @@
                 }
 
                 const html = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Codigo</th>
-                                <th>Nombre</th>
-                                <th>Origen</th>
-                                <th>Destino</th>
-                                <th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${rutasData.map(r => `
+                    <div class="table-container">
+                        <table>
+                            <thead>
                                 <tr>
-                                    <td><strong>${r.codigo || 'SIN-COD'}</strong></td>
-                                    <td>${r.nombre || 'Sin nombre'}</td>
-                                    <td>${r.origen || 'N/D'}</td>
-                                    <td>${r.destino || 'N/D'}</td>
-                                    <td>
-                                        <span class="status ${r.activa === false ? 'inactive' : 'active'}">
-                                            ${r.activa === false ? 'Inactiva' : 'Activa'}
-                                        </span>
-                                    </td>
+                                    <th>Codigo</th>
+                                    <th>Nombre</th>
+                                    <th>Origen</th>
+                                    <th>Destino</th>
+                                    <th>Vías</th>
+                                    <th>Estado</th>
                                 </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                ${rutasData.map(r => {
+                                    const viasDetalle = (r.vias_detalle || []).map(v => {
+                                        const code = v.code || '';
+                                        const name = v.name || '';
+                                        if (!code && !name) return '';
+                                        return `<span class="via-pill"><span class="via-code">${code}</span><span class="via-name">${name}</span></span>`;
+                                    }).filter(Boolean);
+                                    const viasFallback = (r.vias && r.vias.length)
+                                        ? r.vias.map(v => `<span class="via-pill"><span class="via-code">${v}</span></span>`)
+                                        : [];
+                                    if (!viasDetalle.length && !viasFallback.length) {
+                                        viasFallback.push(`<span class="via-pill"><span class="via-name">${r.via_codigo || r.datos_adicionales?.viaCode || r.datos_adicionales?.via?.name || 'N/D'}</span></span>`);
+                                    }
+                                    const viasHtml = `<div class="vias-chips">${(viasDetalle.length ? viasDetalle : viasFallback).join('')}</div>`;
+                                    return `
+                                        <tr>
+                                            <td><strong>${r.codigo || 'SIN-COD'}</strong></td>
+                                            <td>${r.nombre || 'Sin nombre'}</td>
+                                            <td>${r.origen || 'N/D'}</td>
+                                            <td>${r.destino || 'N/D'}</td>
+                                            <td>${viasHtml}</td>
+                                            <td>
+                                                <span class="status ${r.activa === false ? 'inactive' : 'active'}">
+                                                    ${r.activa === false ? 'Inactiva' : 'Activa'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
                 `;
 
                 content.innerHTML = html;
@@ -608,15 +839,27 @@
             document.getElementById('stats').innerHTML = html;
         }
 
-        function aplicarFiltros() {
-            cargarDatos();
+        async function aplicarFiltros() {
+            await cargarDatos();
         }
 
         function limpiarFiltros() {
             document.getElementById('filterCliente').value = '';
             document.getElementById('filterCiudad').value = '';
             document.getElementById('filterRol').value = '';
-            cargarDatos();
+            document.getElementById('filterSoloActivos').checked = true;
+            document.getElementById('filterRouteCode').value = '';
+            document.getElementById('filterRouteCode').dataset.auto = 'false';
+            document.getElementById('filterViaCode').value = '';
+            document.getElementById('vehiculosContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
+            document.getElementById('personalContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
+            document.getElementById('rutasContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
+            document.getElementById('vehiculosCount').textContent = '0';
+            document.getElementById('personalCount').textContent = '0';
+            document.getElementById('rutasCount').textContent = '0';
+            document.getElementById('stats').innerHTML = '';
+            setLoading(false);
+            sugerirRouteCode();
         }
 
         window.addEventListener('load', inicializar);

@@ -1,18 +1,29 @@
 """
 Cliente base para consumir Cloudfleet.
 Completa CLOUDFLEET_API_URL y CLOUDFLEET_API_TOKEN antes de usar.
+Incluye manejo basico de 404 y 429 para no romper la UI.
 """
 import os
 import time
 from typing import Any
+from datetime import datetime, timedelta
+
 import requests
+from requests import HTTPError
 
 
 BASE_URL = os.getenv("CLOUDFLEET_API_URL", "https://fleet.cloudfleet.com/api/v1").rstrip("/")
 TOKEN = os.getenv("CLOUDFLEET_API_TOKEN", "")
-TIMEOUT = 10
+TIMEOUT = 6
 PAGE_SIZE = 50  # CloudFleet API limit
-RATE_LIMIT_DELAY = 2.0  # Seconds between requests to stay under 30 req/min
+# 30 req/min -> ~2s; dejo 1.8 para acelerar un poco sin pasarse
+RATE_LIMIT_DELAY = float(os.getenv("CLOUDFLEET_RATE_LIMIT_DELAY", "1.8"))
+# 0 = sin limite, >0 limita paginas por seguridad
+MAX_PAGES = int(os.getenv("CLOUDFLEET_MAX_PAGES", "0"))
+# 0 = sin limite, >0 corta por ventana de tiempo
+MAX_TOTAL_SECONDS = float(os.getenv("CLOUDFLEET_MAX_TOTAL_SECONDS", "0"))
+# Numero maximo de reintentos ante 429
+MAX_RETRIES_429 = int(os.getenv("CLOUDFLEET_MAX_RETRIES_429", "10"))
 
 
 def _check_config():
@@ -28,64 +39,98 @@ def _headers() -> dict[str, str]:
     }
 
 
-def _get(path: str) -> Any:
+def _get(path: str, default_on_404: Any = None) -> Any:
+    """
+    GET simple con manejo opcional de 404 devolviendo default_on_404.
+    """
     _check_config()
     url = f"{BASE_URL}/{path.lstrip('/')}"
     resp = requests.get(url, headers=_headers(), timeout=TIMEOUT)
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except HTTPError as exc:
+        if resp.status_code == 404 and default_on_404 is not None:
+            return default_on_404
+        raise exc
     time.sleep(RATE_LIMIT_DELAY)  # Rate limiting
     return resp.json()
 
 
-def _get_paginated(path: str) -> list[dict[str, Any]]:
+def _get_paginated(path: str, max_pages: int | None = None) -> list[dict[str, Any]]:
     """
     Obtiene todos los registros paginados de CloudFleet API.
-    La API retorna máximo 50 items por página.
+    Maneja 404 devolviendo lo recopilado hasta el momento y 429 con reintentos.
+    Soporta respuestas tipo lista o envueltas en un objeto con campo items/data/results.
     """
     _check_config()
-    all_items = []
+    all_items: list[dict[str, Any]] = []
     page = 1
-    
+    retries_429 = 0
+    start_time = time.time() if MAX_TOTAL_SECONDS else None
+    max_pages_effective = max_pages if max_pages is not None else MAX_PAGES
+
     while True:
         separator = '&' if '?' in path else '?'
         paginated_path = f"{path}{separator}page={page}&pageSize={PAGE_SIZE}"
-        
         url = f"{BASE_URL}/{paginated_path.lstrip('/')}"
+
         resp = requests.get(url, headers=_headers(), timeout=TIMEOUT)
-        resp.raise_for_status()
-        
+        try:
+            resp.raise_for_status()
+            retries_429 = 0  # reset al tener respuesta ok
+        except HTTPError as exc:
+            status = resp.status_code
+            if status == 404:
+                return all_items
+            if status == 429:
+                retries_429 += 1
+                if retries_429 > MAX_RETRIES_429:
+                    raise
+                # Espera incremental para respetar rate limit estricto
+                time.sleep(RATE_LIMIT_DELAY * max(1, retries_429))
+                continue
+            raise exc
+
         data = resp.json()
-        
-        # Si no es una lista, retornar como está
-        if not isinstance(data, list):
-            return data
-        
-        # Si no hay más datos, terminar
-        if not data or len(data) == 0:
+
+        # Si viene envuelto en un objeto de paginacion
+        if isinstance(data, dict):
+            items = data.get("items") or data.get("data") or data.get("results")
+            if items is None:
+                return data  # devolver tal cual si no hay items
+            if not isinstance(items, list):
+                return data
+            data = items
+
+        if not data:
             break
-            
+
         all_items.extend(data)
-        
-        # Si recibimos menos de PAGE_SIZE, es la última página
+
         if len(data) < PAGE_SIZE:
             break
-            
+        if max_pages_effective and page >= max_pages_effective:
+            break
+
         page += 1
-        time.sleep(RATE_LIMIT_DELAY)  # Rate limiting entre páginas
-    
+        time.sleep(RATE_LIMIT_DELAY)  # Rate limiting between pages
+
+        if MAX_TOTAL_SECONDS and start_time and (time.time() - start_time) > MAX_TOTAL_SECONDS:
+            break
+
     return all_items
 
 
 def get_camiones(code: str | None = None) -> list[dict[str, Any]]:
     """
-    Obtiene listado completo de vehiculos con paginación automática.
+    Obtiene listado completo de vehiculos con paginacion automatica.
     Para filtrar por codigo, usa code=ABC123.
     Endpoint base de Cloudfleet: /vehicles/?code={vehicle-code}
     """
     path = "vehicles/"
     if code:
         path += f"?code={code}"
-        return _get(path)  # Si busca por código específico, no paginar
+        return _get(path, default_on_404=[])
     return _get_paginated(path)
 
 
@@ -107,12 +152,12 @@ def get_clientes() -> list[dict[str, Any]]:
     Obtiene listado de clientes.
     Endpoint: /customers/
     """
-    return _get("customers/")
+    return _get("customers/", default_on_404=[])
 
 
 def get_cliente(customer_id: str) -> dict[str, Any]:
     """
-    Obtiene un cliente específico por ID.
+    Obtiene un cliente especifico por ID.
     Endpoint: /customers/{customerId}
     """
     return _get(f"customers/{customer_id}")
@@ -127,12 +172,12 @@ def get_sedes(customer_id: str | None = None) -> list[dict[str, Any]]:
     path = "locations/"
     if customer_id:
         path += f"?customerId={customer_id}"
-    return _get(path)
+    return _get(path, default_on_404=[])
 
 
 def get_sede(location_id: str) -> dict[str, Any]:
     """
-    Obtiene una sede específica por ID.
+    Obtiene una sede especifica por ID.
     Endpoint: /locations/{locationId}
     """
     return _get(f"locations/{location_id}")
@@ -147,12 +192,12 @@ def get_rutas(customer_id: str | None = None) -> list[dict[str, Any]]:
     path = "routes/"
     if customer_id:
         path += f"?customerId={customer_id}"
-    return _get(path)
+    return _get_paginated(path)
 
 
 def get_ruta(route_id: str) -> dict[str, Any]:
     """
-    Obtiene una ruta específica por ID.
+    Obtiene una ruta especifica por ID.
     Endpoint: /routes/{routeId}
     """
     return _get(f"routes/{route_id}")
@@ -169,13 +214,46 @@ def get_travel(travel_number: str) -> dict[str, Any]:
 def get_travels(
     customer_id: str | None = None,
     start_date: str | None = None,
-    end_date: str | None = None
+    end_date: str | None = None,
+    departure_from: str | None = None,
+    departure_to: str | None = None,
+    finished_from: str | None = None,
+    finished_to: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    system_finished_from: str | None = None,
+    system_finished_to: str | None = None,
+    vehicle_code: str | None = None,
+    route_code: str | None = None,
+    via_code: str | None = None,
+    travel_number: str | None = None,
+    max_pages: int | None = None,
 ) -> list[dict[str, Any]]:
     """
     Obtiene listado de viajes.
-    Puede filtrar por cliente y rango de fechas.
-    Endpoint: /travels/?customerId={customerId}&startDate={startDate}&endDate={endDate}
+    CloudFleet exige al menos un filtro y rango de fechas no mayor a 2 meses.
     """
+    if not (travel_number or vehicle_code or route_code or customer_id or start_date or end_date or departure_from or departure_to or finished_from or finished_to or created_from or created_to or system_finished_from or system_finished_to):
+        raise ValueError("CloudFleet /travels requiere al menos un filtro")
+
+    # Validar rango max de 62 días en departure/finished/system_finished/created si se proveen
+    def _check_range(fro: str | None, to: str | None, label: str):
+        if not fro or not to:
+            return
+        try:
+            df_dt = datetime.fromisoformat(fro.replace("Z", "+00:00"))
+            dt_dt = datetime.fromisoformat(to.replace("Z", "+00:00"))
+            if (dt_dt - df_dt) > timedelta(days=62):
+                raise ValueError(f"El rango {label} no debe superar 2 meses")
+        except Exception:
+            # si formato invalido, dejamos que la API responda
+            return
+
+    _check_range(departure_from or start_date, departure_to or end_date, "departure")
+    _check_range(finished_from, finished_to, "finished")
+    _check_range(created_from, created_to, "created")
+    _check_range(system_finished_from, system_finished_to, "systemFinished")
+
     path = "travels/"
     params = []
     if customer_id:
@@ -184,22 +262,46 @@ def get_travels(
         params.append(f"startDate={start_date}")
     if end_date:
         params.append(f"endDate={end_date}")
+    if departure_from:
+        params.append(f"departureDateFrom={departure_from}")
+    if departure_to:
+        params.append(f"departureDateTo={departure_to}")
+    if finished_from:
+        params.append(f"finishedDateFrom={finished_from}")
+    if finished_to:
+        params.append(f"finishedDateTo={finished_to}")
+    if created_from:
+        params.append(f"createdDateFrom={created_from}")
+    if created_to:
+        params.append(f"createdDateTo={created_to}")
+    if system_finished_from:
+        params.append(f"systemFinishedDateFrom={system_finished_from}")
+    if system_finished_to:
+        params.append(f"systemFinishedDateTo={system_finished_to}")
+    if vehicle_code:
+        params.append(f"vehicleCode={vehicle_code}")
+    if route_code:
+        params.append(f"routeCode={route_code}")
+    if via_code:
+        params.append(f"viaCode={via_code}")
+    if travel_number:
+        params.append(f"number={travel_number}")
     if params:
         path += "?" + "&".join(params)
-    return _get(path)
+    return _get_paginated(path, max_pages=max_pages)
 
 
-def get_personas() -> list[dict[str, Any]]:
+def get_personas(max_pages: int | None = None) -> list[dict[str, Any]]:
     """
-    Obtiene listado completo de personas con paginación automática.
+    Obtiene listado completo de personas con paginacion automatica.
     Endpoint: /people/
     """
-    return _get_paginated("people/")
+    return _get_paginated("people/", max_pages=max_pages)
 
 
 def get_persona(person_id: str) -> dict[str, Any]:
     """
-    Obtiene una persona específica por ID.
+    Obtiene una persona especifica por ID.
     Endpoint: /people/{personId}
     """
     return _get(f"people/{person_id}")
