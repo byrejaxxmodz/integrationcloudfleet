@@ -121,22 +121,30 @@ def _get_paginated(path: str, max_pages: int | None = None) -> list[dict[str, An
     return all_items
 
 
-def get_camiones(code: str | None = None) -> list[dict[str, Any]]:
+def get_camiones(code: str | None = None, customer_id: str | None = None, max_pages: int | None = None) -> list[dict[str, Any]]:
     """
     Obtiene listado completo de vehiculos con paginacion automatica.
     Para filtrar por codigo, usa code=ABC123.
     Endpoint base de Cloudfleet: /vehicles/?code={vehicle-code}
     """
     path = "vehicles/"
+    params = []
     if code:
-        path += f"?code={code}"
-        return _get(path, default_on_404=[])
-    return _get_paginated(path)
+        params.append(f"code={code}")
+    if customer_id:
+        params.append(f"customerId={customer_id}")
+    
+    if params:
+        path += "?" + "&".join(params)
+        
+    # Si buscamos por codigo especifico, retornamos todo (no deberia ser mucho).
+    # Si es listado general, respetamos max_pages.
+    return _get_paginated(path, max_pages=max_pages if not code else None)
 
 
 def get_camion_por_codigo(code: str) -> dict[str, Any]:
     """Atajo para un solo vehiculo por codigo."""
-    data = get_camiones(code)
+    data = get_camiones(code=code)
     if isinstance(data, list) and data:
         return data[0]
     return data
@@ -183,16 +191,16 @@ def get_sede(location_id: str) -> dict[str, Any]:
     return _get(f"locations/{location_id}")
 
 
-def get_rutas(customer_id: str | None = None) -> list[dict[str, Any]]:
+def get_rutas(customer_id: str | None = None, max_pages: int | None = None) -> list[dict[str, Any]]:
     """
     Obtiene listado de rutas.
     Si se proporciona customer_id, filtra por cliente.
-    Endpoint: /routes/ o /routes/?customerId={customerId}
+    Endpoint: /routes or /routes?customerId={customerId}
     """
-    path = "routes/"
+    path = "routes"
     if customer_id:
         path += f"?customerId={customer_id}"
-    return _get_paginated(path)
+    return _get_paginated(path, max_pages=max_pages)
 
 
 def get_ruta(route_id: str) -> dict[str, Any]:

@@ -1,13 +1,19 @@
-# Microservicio FastAPI para gestión completa de CloudFleet
+# Microservicio FastAPI para gestiÃ³n completa de CloudFleet
 import os
 import time
 import logging
+import traceback
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+from app.database import engine, get_db, Base
+from app.models import Viaje, ViajeDetalle
+
 
 try:
     from app.cloudfleet import (
@@ -29,7 +35,7 @@ except Exception:
     get_travels = None
     get_travel = None
 
-# Parámetros de negocio
+# ParÃ¡metros de negocio
 MAX_DIAS_CONSECUTIVOS = int(os.getenv("MAX_DIAS_CONSECUTIVOS", "6"))
 FORCE_CLOUDFLEET = os.getenv("FORCE_CLOUDFLEET", "false").lower() == "true"
 TARGET_PLACA = os.getenv("TARGET_PLACA", "FKL 92H")
@@ -41,7 +47,7 @@ TRAVELS_FALLBACK_MAX_SECONDS = float(os.getenv("TRAVELS_FALLBACK_MAX_SECONDS", "
 # Paginas maximas a recorrer en travels cuando se usan filtros
 TRAVELS_MAX_PAGES = int(os.getenv("TRAVELS_MAX_PAGES", "20"))
 # Dias hacia atras para el rango por defecto en travels (fecha de creacion)
-TRAVELS_RANGE_DAYS = int(os.getenv("TRAVELS_RANGE_DAYS", "365"))
+TRAVELS_RANGE_DAYS = int(os.getenv("TRAVELS_RANGE_DAYS", "30"))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cloudfleet")
@@ -51,6 +57,24 @@ app = FastAPI(
     version="1.0.0",
     description="API para gestión completa de clientes, sedes, rutas, vehículos y personal"
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.mount("/public", StaticFiles(directory="public"), name="public")
+
+# Startup event to create tables
+@app.on_event("startup")
+def startup():
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logger.warning(f"DB Connection failed on startup: {e}")
 
 
 # ============= MODELOS PYDANTIC =============
@@ -220,7 +244,7 @@ def _ciudades_por_cliente(cliente_id: Optional[str]) -> set[str]:
 def _clientes_desde_camiones() -> list[Cliente]:
     """
     Fallback simple para construir clientes a partir de los centros de costo
-    presentes en los vehiculos cuando la API de clientes no esta disponible.
+    o el campo customerId presentes en los vehiculos cuando la API de clientes no esta disponible.
     """
     if not get_camiones:
         return []
@@ -232,6 +256,7 @@ def _clientes_desde_camiones() -> list[Cliente]:
     clientes: list[Cliente] = []
     vistos: set[str] = set()
     for v in camiones or []:
+        # 1. Intentar costCenter
         cost_center = v.get("costCenter") or {}
         cid = str(
             cost_center.get("id")
@@ -239,10 +264,24 @@ def _clientes_desde_camiones() -> list[Cliente]:
             or cost_center.get("name")
             or ""
         ).strip()
+        
+        nombre = cost_center.get("name")
+        
+        # 2. Si no hay costCenter, ignorar o usar customerId?
+        # A veces el vehiculo tiene customerId directo
+        if not cid:
+            cid = str(v.get("customerId", "")).strip()
+            # Si usamos customerId, el nombre quizas no lo sepamos, usamos ID
+            if not nombre:
+                nombre = f"Cliente {cid}"
+
         if not cid or cid in vistos:
             continue
+            
         vistos.add(cid)
-        nombre = cost_center.get("name") or f"Cliente {cid}"
+        if not nombre:
+             nombre = f"Cliente {cid}"
+
         clientes.append(
             Cliente(
                 id=cid,
@@ -250,56 +289,13 @@ def _clientes_desde_camiones() -> list[Cliente]:
                 contacto=None,
                 telefono=None,
                 email=None,
-                datos_adicionales={"origen": "cost_center"},
+                datos_adicionales={"origen": "vehiculo_fallback"},
             )
         )
     return clientes
 
 
-def _rutas_dummy(cliente_id: Optional[str]) -> list[Ruta]:
-    """
-    Fallback de rutas basicas para que la UI no quede vacia cuando la API no
-    retorna datos.
-    """
-    base_id = int(cliente_id) if (cliente_id and str(cliente_id).isdigit()) else 0
-    return [
-        Ruta(
-            id=str(base_id + 1),
-            cliente_id=str(cliente_id or "0"),
-            sede_id=None,
-            codigo="RT-001",
-            nombre="Ruta Norte",
-            origen="Origen A",
-            destino="Destino B",
-            distancia_km=12.5,
-            activa=True,
-            datos_adicionales={"dummy": True},
-        ),
-        Ruta(
-            id=str(base_id + 2),
-            cliente_id=str(cliente_id or "0"),
-            sede_id=None,
-            codigo="RT-002",
-            nombre="Ruta Centro",
-            origen="Origen C",
-            destino="Destino D",
-            distancia_km=8.0,
-            activa=True,
-            datos_adicionales={"dummy": True},
-        ),
-        Ruta(
-            id=str(base_id + 3),
-            cliente_id=str(cliente_id or "0"),
-            sede_id=None,
-            codigo="RT-003",
-            nombre="Ruta Sur",
-            origen="Origen E",
-            destino="Destino F",
-            distancia_km=20.0,
-            activa=True,
-            datos_adicionales={"dummy": True},
-        ),
-    ]
+
 
 
 def _parse_location(loc: Any) -> str:
@@ -331,12 +327,12 @@ def _match_ciudad(ciudad_filtro: str, valor: str | None) -> bool:
         return True
     cf = _norm_txt(ciudad_filtro)
     vt = _norm_txt(valor)
-    # También probamos sin el texto entre paréntesis, ej: "Caloto (Cauca)" -> "Caloto"
+    # TambiÃ©n probamos sin el texto entre parÃ©ntesis, ej: "Caloto (Cauca)" -> "Caloto"
     base = vt.split("(")[0].strip() if "(" in vt else vt
     return cf in vt or cf in base
 
 
-VOWELS = set("AEIOUÁÉÍÓÚÜ")
+VOWELS = set("AEIOUÃÃ‰ÃÃ“ÃšÃœ")
 
 
 def _abbr_candidates(texto: str | None, length: int = 3) -> list[str]:
@@ -363,7 +359,7 @@ def _abbr_candidates(texto: str | None, length: int = 3) -> list[str]:
 
 def _abbr(texto: str | None, length: int = 3) -> str:
     """
-    Abreviatura base (usa la primera opción disponible).
+    Abreviatura base (usa la primera opciÃ³n disponible).
     """
     opciones = _abbr_candidates(texto, length)
     return opciones[0] if opciones else ""
@@ -371,7 +367,7 @@ def _abbr(texto: str | None, length: int = 3) -> str:
 
 def _abbr_cliente(nombre: str | None, length: int = 3) -> str:
     """
-    Usa la última palabra del nombre del cliente (ej: 'CCM CHILCO' -> 'CHILCO')
+    Usa la Ãºltima palabra del nombre del cliente (ej: 'CCM CHILCO' -> 'CHILCO')
     y toma sus primeras letras para armar el prefijo.
     """
     if not nombre:
@@ -416,7 +412,7 @@ def _route_codes_candidates(
     route_code: Optional[str] = None,
 ) -> list[str]:
     """
-    Genera posibles códigos de ruta combinando abreviaturas de cliente/ciudad.
+    Genera posibles cÃ³digos de ruta combinando abreviaturas de cliente/ciudad.
     Ej: ['CHL-YUM-VAR', 'CHI-YUM-VAR'] para cubrir variantes.
     """
     if route_code:
@@ -479,33 +475,40 @@ def _agregar_via(
 
 def _vias_desde_item(item: dict[str, Any]) -> tuple[list[str], list[dict[str, Any]], Optional[str]]:
     """
-    Extrae codigos y detalle de vias desde un item (route o travel).
+    Extrae cÃ³digos y detalle de vÃ­as desde un item (route o travel).
     Retorna (codigos_unicos, detalle, via_codigo_principal)
     """
     codigos: set[str] = set()
     detalle: list[dict[str, Any]] = []
     principal: Optional[str] = None
 
-    # Campos directos
+    # Campos directos de vÃ­a
     via_code = item.get("viaCode") or item.get("via_codigo") or item.get("via_code")
-    via_name = item.get("viaName") or item.get("via_nombre")
+    via_name = item.get("viaName") or item.get("via_nombre") or item.get("via_name")
     via_obj = item.get("via") or item.get("way") or item.get("viaObj")
+    
+    # Si via es un objeto, extraer sus datos
     if isinstance(via_obj, dict):
         via_code = via_code or via_obj.get("code")
         via_name = via_name or via_obj.get("name")
-        _agregar_via(codigos, detalle, via_obj.get("code"), via_obj.get("name"), raw=via_obj)
+        if via_obj.get("code") or via_obj.get("name"):
+            _agregar_via(codigos, detalle, via_obj.get("code"), via_obj.get("name"), raw=via_obj)
 
-    # Listado de ways/vias
-    ways = item.get("ways") or item.get("vias") or item.get("routesWays")
+    # Listado de ways/vÃ­as (puede venir como 'ways', 'vias', 'routesWays')
+    ways = item.get("ways") or item.get("vias") or item.get("routesWays") or []
     if isinstance(ways, list):
         for w in ways:
-            if not isinstance(w, dict):
-                continue
-            _agregar_via(codigos, detalle, w.get("code"), w.get("name"), raw=w)
+            if isinstance(w, dict):
+                _agregar_via(codigos, detalle, w.get("code"), w.get("name"), raw=w)
+            elif isinstance(w, str):
+                # Algunos casos retornan lista de cÃ³digos directamente
+                _agregar_via(codigos, detalle, w, None, raw={"code": w})
 
-    # Añadir por campos sueltos
-    _agregar_via(codigos, detalle, via_code, via_name, raw=via_obj if isinstance(via_obj, dict) else None)
+    # Campos sueltos de vÃ­a principal
+    if via_code or via_name:
+        _agregar_via(codigos, detalle, via_code, via_name, raw=via_obj if isinstance(via_obj, dict) else None)
 
+    # Determinar vÃ­a principal
     if via_code:
         principal = str(via_code)
     elif codigos:
@@ -559,6 +562,14 @@ def _vehicle_codes_para_rutas(ciudad: Optional[str], cliente_id: Optional[str]) 
                     match_cliente = True
                 elif centro_nombre and cid in centro_nombre:
                     match_cliente = True
+            
+            # FIX: If filtering by City, accept vehicle if it matches city and has NO customerId
+            if not match_cliente and ciudad and ubicacion and _match_ciudad(ciudad, ubicacion):
+                 cust_val = str(item.get("customerId") or "")
+                 # If no customer ID is assigned, we assume it's available for this city dispatch
+                 if not cust_val or cust_val.lower() == "none" or cust_val == "":
+                     match_cliente = True
+
         if not match_cliente:
             continue
 
@@ -583,10 +594,10 @@ def _travels_para_rutas(
     route_codes: Optional[list[str]] = None,
 ) -> list[dict[str, Any]]:
     """
-    Obtiene viajes usando filtros válidos para la API (routeCode o vehicleCode).
-    - Si se pasa route_code se intenta primero por ahí.
-    - Luego se consulta por vehicleCode de una muestra de vehículos filtrados por ciudad/cliente.
-    - Incluye un rango de fechas por defecto (últimos TRAVELS_RANGE_DAYS) en createdDate para cumplir con la API.
+    Obtiene viajes usando filtros vÃ¡lidos para la API (routeCode o vehicleCode).
+    - Si se pasa route_code se intenta primero por ahÃ­.
+    - Luego se consulta por vehicleCode de una muestra de vehÃ­culos filtrados por ciudad/cliente.
+    - Incluye un rango de fechas por defecto (Ãºltimos TRAVELS_RANGE_DAYS) en createdDate para cumplir con la API.
     """
     travels: list[dict[str, Any]] = []
     start_time = time.time()
@@ -596,12 +607,32 @@ def _travels_para_rutas(
     date_to = hoy.isoformat(timespec="seconds") + "Z"
 
     candidate_route_codes = [rc for rc in (route_codes or [route_code]) if rc]
+    
+    # Si no hay filtros especificos, intentamos traer viajes recientes (por fecha) como fallback
+    # para poblar la lista de rutas activas.
+    if not candidate_route_codes and not via_code and not ciudad and not cliente_id:
+        try:
+             # Traer mas paginas (10) para encontrar mas rutas unicas, a peticion del usuario
+             return get_travels(created_from=date_from, created_to=date_to, max_pages=10) or []
+        except Exception:
+             return []
 
+    # Validar si el cliente_id es un UUID o un ID corto (Centro de Costo / Fallback)
+    is_valid_customer_guid = False
+    if cliente_id:
+        # UUID aprox 36 chars, ID numerico suele ser corto (1, 2, 10...)
+        if len(str(cliente_id)) > 10:
+            is_valid_customer_guid = True
+    
+    # Si tenemos un ID corto, NO lo mandamos a la API porque rompe (409/404)
+    # Lo usaremos solo para filtrar en memoria
+    api_customer_id = cliente_id if is_valid_customer_guid else None
+    
     # Intento directo por routeCode (probando variantes)
     for rc in candidate_route_codes:
         try:
             travels = get_travels(
-                customer_id=str(cliente_id) if cliente_id else None,
+                customer_id=str(api_customer_id) if api_customer_id else None,
                 route_code=rc,
                 via_code=via_code,
                 created_from=date_from,
@@ -615,29 +646,74 @@ def _travels_para_rutas(
 
     # Por vehicleCode
     if not travels:
+        # 1. Try Specific Vehicles in that City (Targeted)
         codes = _vehicle_codes_para_rutas(ciudad, cliente_id)
-        if not codes:
-            return []
-        route_filter = candidate_route_codes[0] if candidate_route_codes else None
-        for code in codes:
-            if TRAVELS_FALLBACK_MAX_SECONDS and (time.time() - start_time) > TRAVELS_FALLBACK_MAX_SECONDS:
-                break
-            try:
-                data = get_travels(
-                    customer_id=str(cliente_id) if cliente_id else None,
-                    vehicle_code=code,
-                    route_code=route_filter,
-                    via_code=via_code,
+        if codes:
+            route_filter = candidate_route_codes[0] if candidate_route_codes else None
+            for code in codes:
+                if TRAVELS_FALLBACK_MAX_SECONDS and (time.time() - start_time) > TRAVELS_FALLBACK_MAX_SECONDS:
+                    break
+                try:
+                    data = get_travels(
+                        customer_id=str(api_customer_id) if api_customer_id else None,
+                        vehicle_code=code,
+                        route_code=route_filter,
+                        via_code=via_code,
+                        created_from=date_from,
+                        created_to=date_to,
+                        max_pages=TRAVELS_MAX_PAGES,
+                    ) or []
+                    travels.extend(data)
+                except ValueError:
+                    continue
+                except Exception:
+                    continue
+
+    # 2. Broad Fallback: If still no travels (or few), and we have a Client ID, fetch GENERAL client travels
+    # This matches "Postman" behavior: find any route used by the client recently, regardless of truck.
+    if (not travels or len(travels) == 0) and cliente_id:
+        try:
+            # Si es UUID valido, usamos filtro API
+            if is_valid_customer_guid:
+                broad_data = get_travels(
+                    customer_id=str(cliente_id),
                     created_from=date_from,
                     created_to=date_to,
-                    max_pages=TRAVELS_MAX_PAGES,
+                    max_pages=5
                 ) or []
-                travels.extend(data)
-            except ValueError:
-                # sin filtros válidos, continuar con el siguiente code
-                continue
-            except Exception:
-                continue
+                travels.extend(broad_data)
+            else:
+                # Si es ID corto (CostCenter), traemos recent history y filtramos en memoria
+                logger.info(f"Fallback CostCenter search for ID={cliente_id}...")
+                broad_data = get_travels(
+                    created_from=date_from,
+                    created_to=date_to,
+                    max_pages=10 # Aumentamos paginas para asegurar encontrar datos
+                ) or []
+                
+                # Filtrar en memoria por customerId o costCenter
+                filtered_data = []
+                target_id = str(cliente_id).strip()
+                for t in broad_data:
+                    # Chequear customerId directo
+                    c_id = str(t.get("customerId") or "").strip()
+                    if c_id == target_id:
+                        filtered_data.append(t)
+                        continue
+                    
+                    # Chequear Cost Center
+                    cc = t.get("costCenter")
+                    if isinstance(cc, dict):
+                        cc_id = str(cc.get("id") or cc.get("code") or "").strip()
+                        if cc_id == target_id:
+                            filtered_data.append(t)
+                            continue
+                            
+                travels.extend(filtered_data)
+                # logger.info(f"  - Found {len(filtered_data)} travels for CostCenter={cliente_id}")
+
+        except Exception as e:
+            logger.warning(f"Broad search failed: {e}")
 
     return travels
 
@@ -681,7 +757,7 @@ def _rutas_desde_travels(
         travel_city = travel_city_obj.get("name") if isinstance(travel_city_obj, dict) else travel_city_obj
         vias_codigos, vias_detalle, via_codigo = _vias_desde_item(t)
 
-        # No filtramos por prefijo de ruta para no descartar coincidencias válidas
+        # No filtramos por prefijo de ruta para no descartar coincidencias vÃ¡lidas
 
         # Filtrar por ciudad si se especifica (coincide en origen o destino)
         if ciudad:
@@ -794,7 +870,7 @@ def listar_clientes():
 @app.get("/clientes/{cliente_id}", response_model=ClienteCompleto)
 def obtener_cliente_completo(cliente_id: str):
     """
-    Obtiene un cliente específico con todas sus sedes
+    Obtiene un cliente especÃ­fico con todas sus sedes
     """
     if not get_cliente or not get_sedes:
         raise HTTPException(status_code=503, detail="CloudFleet API no configurada")
@@ -840,13 +916,15 @@ def obtener_cliente_completo(cliente_id: str):
 def listar_sedes(cliente_id: Optional[str] = Query(None, description="ID del cliente para filtrar")):
     """
     Obtiene el listado de sedes. Opcionalmente filtra por cliente_id
+    Si CloudFleet no retorna sedes, genera sedes virtuales a partir de las ciudades de los vehículos.
     """
     if not get_sedes:
         raise HTTPException(status_code=503, detail="CloudFleet API no configurada")
     
     try:
-        sedes_data = get_sedes(cliente_id)
         sedes = []
+        # 1. Intentar API Sedes / Locations
+        sedes_data = get_sedes(cliente_id) or []
         for item in sedes_data:
             sedes.append(Sede(
                 id=str(item.get("id", "")),
@@ -857,15 +935,64 @@ def listar_sedes(cliente_id: Optional[str] = Query(None, description="ID del cli
                 telefono=item.get("phone", item.get("telefono")),
                 datos_adicionales=item
             ))
+
+        # 2. Si no hay sedes (y es lo comun en cuentas nuevas), extraer ciudades de los vehiculos
+        # "La sede es la ciudad"
+        if not sedes and get_camiones:
+            vehiculos = get_camiones() or []
+            ciudades_vistas = set()
+            idx = 1
+            for v in vehiculos:
+                # Filtrar por cliente si se solicitó
+                if cliente_id:
+                    v_customer_id = str(v.get("customerId", v.get("cliente_id", "")))
+                    cost_center = v.get("costCenter", {})
+                    cc_id = str(cost_center.get("id") or "").strip()
+                    cc_name = str(cost_center.get("name") or "").lower()
+                    
+                    match_cliente = False
+                    if v_customer_id and v_customer_id == str(cliente_id):
+                        match_cliente = True
+                    elif cc_id and str(cliente_id) in cc_id:
+                        match_cliente = True
+                    elif cc_name and str(cliente_id).lower() in cc_name:
+                         match_cliente = True
+                    
+                    if not match_cliente:
+                        continue
+
+                # Extraer ciudad: puede ser objeto o string
+                city_obj = v.get("city")
+                nombre_ciudad = ""
+                if isinstance(city_obj, dict):
+                    nombre_ciudad = city_obj.get("name")
+                elif isinstance(city_obj, str):
+                    nombre_ciudad = city_obj
+                
+                if nombre_ciudad:
+                    nombre_ciudad = nombre_ciudad.strip()
+                    if nombre_ciudad not in ciudades_vistas:
+                        ciudades_vistas.add(nombre_ciudad)
+                        sedes.append(Sede(
+                            id=f"CITY:{nombre_ciudad}",
+                            cliente_id=str(cliente_id or "0"),
+                            nombre=nombre_ciudad,
+                            ciudad=nombre_ciudad,
+                            direccion="Ubicación Ciudad",
+                            telefono=""
+                        ))
+                        idx += 1
+
         return sedes
     except Exception as e:
+        logger.error(f"Error listar sedes: {e}")
         raise HTTPException(status_code=500, detail=f"Error al obtener sedes: {str(e)}")
 
 
 @app.get("/sedes/{sede_id}", response_model=SedeCompleta)
 def obtener_sede_completa(sede_id: str):
     """
-    Obtiene una sede específica con todos sus vehículos, personal y rutas
+    Obtiene una sede especÃ­fica con todos sus vehÃ­culos, personal y rutas
     """
     if not get_sede or not get_camiones or not get_personas or not get_rutas:
         raise HTTPException(status_code=503, detail="CloudFleet API no configurada")
@@ -883,12 +1010,12 @@ def obtener_sede_completa(sede_id: str):
             datos_adicionales=sede_data
         )
         
-        # Obtener vehículos (filtramos por ciudad de la sede si aplica)
+        # Obtener vehÃ­culos (filtramos por ciudad de la sede si aplica)
         vehiculos_data = get_camiones()
         ciudad_sede = sede.ciudad
         vehiculos = []
         for item in vehiculos_data:
-            # Filtrar por ubicación si coincide
+            # Filtrar por ubicaciÃ³n si coincide
             ubicacion = item.get("location", item.get("ubicacion_ciudad", ""))
             if ciudad_sede and ubicacion and ciudad_sede.lower() in ubicacion.lower():
                 vehiculos.append(Vehiculo(
@@ -985,7 +1112,11 @@ def listar_rutas(
         # Intentar /routes si est? disponible
         if get_rutas:
             try:
-                rutas_data = get_rutas(cliente_id) or []
+                # Si no hay filtros, limitamos paginas para no traer miles de rutas
+                mp = None
+                if not cliente_id and not route_code:
+                     mp = 10
+                rutas_data = get_rutas(cliente_id, max_pages=mp) or []
                 for item in rutas_data:
                     codigo = (
                         item.get("code")
@@ -997,7 +1128,8 @@ def listar_rutas(
                         continue
                     origen = _parse_location(item.get("origin", item.get("origen")))
                     destino = _parse_location(item.get("destination", item.get("destino")))
-                    if ciudad and not (_match_ciudad(ciudad, origen) or _match_ciudad(ciudad, destino)):
+                    # Si se usa route_code no filtramos por ciudad para no descartar rutas vÃ¡lidas
+                    if ciudad and not route_code and not (_match_ciudad(ciudad, origen) or _match_ciudad(ciudad, destino)):
                         continue
                     vias_codigos, vias_detalle, via_codigo = _vias_desde_item(item)
                     rutas.append(Ruta(
@@ -1052,8 +1184,112 @@ def listar_rutas(
         return list(rutas_map.values())
     except Exception as e:
         logger.error("Error al obtener rutas: %s", e)
-        # Evitar romper el front: devolver lista vacía
+        # Evitar romper el front: devolver lista vacÃ­a
         return []
+
+
+# ============= ENDPOINTS DE RUTAS (MEJORADO) =============
+
+@app.get("/rutas_v2", response_model=List[Ruta])
+def listar_rutas_v2(
+    cliente_id: Optional[str] = Query(None, description="ID del cliente para filtrar"),
+    ciudad: Optional[str] = Query(None, description="Ciudad para filtrar por origen/destino"),
+    route_code: Optional[str] = Query(None, description="Codigo de ruta para filtrar"),
+    via_code: Optional[str] = Query(None, description="Codigo de via para filtrar"),
+):
+    """
+    VersiÃ³n mejorada de /rutas que no filtra por ciudad/cliente cuando se especifica route_code
+    y enriquece vÃ­as desde travels.
+    """
+    try:
+        rutas: list[Ruta] = []
+        route_codes = _route_codes_candidates(cliente_id, ciudad, route_code)
+        primary_route_code = route_codes[0] if route_codes else None
+
+        if get_rutas:
+            try:
+                # Limit pages to prevent hang, especially if filters are broad
+                mp = None
+                if not cliente_id and not route_code:
+                     mp = 10
+                rutas_data = get_rutas(cliente_id, max_pages=mp) or []
+                for item in rutas_data:
+                    codigo = (
+                        item.get("code")
+                        or item.get("routeCode")
+                        or item.get("codigo")
+                        or "SIN-COD"
+                    )
+                    if primary_route_code and primary_route_code.upper() not in codigo.upper():
+                        continue
+                    origen = _parse_location(item.get("origin", item.get("origen")))
+                    destino = _parse_location(item.get("destination", item.get("destino")))
+                    if ciudad and not (_match_ciudad(ciudad, origen) or _match_ciudad(ciudad, destino)):
+                        continue
+                    vias_codigos, vias_detalle, via_codigo = _vias_desde_item(item)
+                    if via_code and via_codigo and via_code.upper() != via_codigo.upper():
+                        if not any(via_code.upper() == vc.upper() for vc in vias_codigos):
+                            continue
+                    rutas.append(Ruta(
+                        id=str(item.get("id", "")),
+                        cliente_id=str(item.get("customerId", item.get("cliente_id", ""))),
+                        sede_id=str(item.get("locationId", item.get("sede_id", ""))),
+                        codigo=codigo,
+                        nombre=item.get("name", item.get("nombre", codigo)),
+                        origen=origen,
+                        destino=destino,
+                        distancia_km=item.get("distance", item.get("distancia_km")),
+                        activa=item.get("active", item.get("activa", True)),
+                        via_codigo=via_codigo,
+                        vias=vias_codigos,
+                        vias_detalle=vias_detalle,
+                        datos_adicionales=item
+                    ))
+            except Exception as e:
+                logger.warning(f"Error obteniendo rutas desde /routes: {e}")
+
+        rutas_travels = _rutas_desde_travels(
+            cliente_id,
+            ciudad,
+            route_code=primary_route_code,
+            route_codes=route_codes,
+            via_code=via_code,
+        )
+        rutas_map: dict[tuple[str, str, str], Ruta] = {}
+        for r in rutas:
+            rutas_map[(r.codigo.upper(), r.origen, r.destino)] = r
+        for r in rutas_travels:
+            key = (r.codigo.upper(), r.origen, r.destino)
+            existente = rutas_map.get(key)
+            if existente:
+                if r.via_codigo and not existente.via_codigo:
+                    existente.via_codigo = r.via_codigo
+                for vc in r.vias:
+                    if vc and vc not in existente.vias:
+                        existente.vias.append(vc)
+                for vd in r.vias_detalle:
+                    code = vd.get("code")
+                    name = vd.get("name")
+                    dup = any(
+                        (code and code == d.get("code"))
+                        or (name and name == d.get("name"))
+                        for d in existente.vias_detalle
+                    )
+                    if not dup:
+                        existente.vias_detalle.append(vd)
+            else:
+                rutas_map[key] = r
+
+        resultado = list(rutas_map.values())
+        if route_code:
+            logger.info(f"Búsqueda por route_code={route_code}: encontradas {len(resultado)} rutas")
+            for r in resultado:
+                logger.info(f"  - {r.codigo}: {len(r.vias)} vías, via_codigo={r.via_codigo}")
+        return resultado
+    except Exception as e:
+        logger.error(f"Error al obtener rutas (v2): {e}", exc_info=True)
+        return []
+
 @app.get("/rutas/{ruta_id}", response_model=Ruta)
 def obtener_ruta(ruta_id: str):
     """
@@ -1086,7 +1322,7 @@ def obtener_ruta(ruta_id: str):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener ruta: {str(e)}")
-# ============= ENDPOINTS DE VEHÍCULOS =============
+# ============= ENDPOINTS DE VEHÃCULOS =============
 
 @app.get("/vehiculos", response_model=List[Vehiculo])
 def listar_vehiculos(
@@ -1095,22 +1331,19 @@ def listar_vehiculos(
     centro_costo: Optional[str] = Query(None, description="Centro de costo para filtrar"),
     cliente_id: Optional[str] = Query(None, description="ID del cliente para filtrar por sus sedes")
 ):
-    """
-    Obtiene el listado de vehiculos. Opcionalmente filtra por sede, ciudad,
-    centro de costo o cliente (usando las ciudades de sus sedes).
-    """
     if not get_camiones:
         raise HTTPException(status_code=503, detail="CloudFleet API no configurada")
     
     try:
-        vehiculos_data = get_camiones()
-        ciudades_cliente = _ciudades_por_cliente(cliente_id)
-        vehiculos = []
+        # Intentar filtrar por cliente desde la API si es posible, y limitar paginas para evitar HANG
+        vehiculos_data = get_camiones(customer_id=cliente_id, max_pages=10)
+        
+        vehiculos: list[Vehiculo] = []
         for item in vehiculos_data:
             # Obtener ciudad (puede ser objeto o string)
             city_obj = item.get("city")
             ubicacion = city_obj.get("name", "") if isinstance(city_obj, dict) else (city_obj or "")
-            
+
             # Obtener centro de costo
             cost_center = item.get("costCenter")
             centro_costo_nombre = cost_center.get("name", "") if isinstance(cost_center, dict) else ""
@@ -1154,6 +1387,11 @@ def listar_vehiculos(
                     centro_costo.lower() not in centro_costo_code.lower()):
                     continue
             
+            # FILTRO GLOBAL: Excluir Montacargas y Equipos Estacionarios
+            tipo_veh = str(item.get("typeName") or "").lower()
+            if "montacarga" in tipo_veh or "estacionario" in tipo_veh:
+                continue
+
             vehiculos.append(Vehiculo(
                 id=str(item.get("id", "")),
                 sede_id=sede_id,
@@ -1178,11 +1416,7 @@ def listar_personal(
     rol: Optional[str] = Query(None, description="Rol: conductor, auxiliar"),
     cliente_id: Optional[str] = Query(None, description="ID del cliente para filtrar por sus sedes")
 ):
-    """
-    Obtiene el listado de personal. Opcionalmente filtra por sede, ciudad, rol
-    o cliente (usando las ciudades de sus sedes).
-    NOTA: El personal NO se filtra por centro de costo, solo por ciudad.
-    """
+
     if not get_personas:
         raise HTTPException(status_code=503, detail="CloudFleet API no configurada")
     
@@ -1248,6 +1482,8 @@ def listar_personal(
             ))
         return personal
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al obtener personal: {str(e)}")
 
 
@@ -1255,13 +1491,7 @@ def listar_personal(
 
 @app.get("/clientes/{cliente_id}/resumen", response_model=ResumenOperacional)
 def obtener_resumen_operacional(cliente_id: str):
-    """
-    Obtiene un resumen operacional completo de un cliente:
-    - Total de sedes
-    - Total de vehículos y cuántos están activos
-    - Total de personal (conductores y auxiliares) y cuántos están activos
-    - Total de rutas
-    """
+
     if not get_cliente or not get_sedes or not get_rutas:
         raise HTTPException(status_code=503, detail="CloudFleet API no configurada")
     
@@ -1278,11 +1508,11 @@ def obtener_resumen_operacional(cliente_id: str):
         rutas_data = get_rutas(cliente_id)
         total_rutas = len(rutas_data)
         
-        # Obtener vehículos y personal de todas las sedes
+        # Obtener vehÃ­culos y personal de todas las sedes
         vehiculos_data = get_camiones() if get_camiones else []
         personal_data = get_personas() if get_personas else []
         
-        # Contar vehículos activos
+        # Contar vehÃ­culos activos
         vehiculos_activos = sum(1 for v in vehiculos_data if v.get("active", v.get("activo", True)))
         
         # Separar y contar personal
@@ -1305,25 +1535,13 @@ def obtener_resumen_operacional(cliente_id: str):
         raise HTTPException(status_code=500, detail=f"Error al obtener resumen: {str(e)}")
 
 
-# ============= ENDPOINTS DE PROGRAMACIÓN (LEGACY) =============
+# ============= ENDPOINTS DE PROGRAMACIÃ“N (LEGACY) =============
 
-def _asignaciones_dummy() -> List[Asignacion]:
-    """Fallback simple para pruebas locales con IDs que existan en la BD."""
-    return [
-        Asignacion(
-            ruta_id=1,
-            vehiculo_id=178,
-            conductor_id=1,
-            auxiliar_id=2,
-            notas="Asignacion de prueba usando datos locales",
-        ),
-    ]
+
 
 
 def _asignaciones_desde_cloudfleet(req: ScheduleRequest) -> List[Asignacion]:
-    """
-    Obtiene datos desde Cloudfleet. Completa URLs/keys y logica en cloudfleet.py.
-    """
+
     if not get_camiones or not get_personas:
         raise RuntimeError("Cliente Cloudfleet no configurado")
 
@@ -1398,11 +1616,7 @@ def _asignaciones_desde_cloudfleet(req: ScheduleRequest) -> List[Asignacion]:
 
 @app.post("/schedule", response_model=List[Asignacion])
 def schedule(req: ScheduleRequest):
-    """
-    Endpoint de programación (legacy).
-    - Si Cloudfleet está configurado, intenta usarlo.
-    - Si falla o no está configurado, devuelve asignaciones dummy.
-    """
+
     try:
         return _asignaciones_desde_cloudfleet(req)
     except Exception as exc:
@@ -1415,14 +1629,74 @@ def schedule(req: ScheduleRequest):
 
 @app.get("/dashboard")
 def dashboard():
-    """
-    Sirve la interfaz web para visualizar vehículos y personal
-    """
+
     import pathlib
     html_path = pathlib.Path(__file__).parent.parent / "public" / "index.html"
     return FileResponse(html_path)
 
 
+
+# ============= SCHEDULER (DESPACHO AUTOMATICO) =============
+
+class AutoScheduleRequest(BaseModel):
+    sede_id: str
+    fecha: str  # YYYY-MM-DD
+    quota: int  # Numero de viajes a programar (ej: 5)
+    cliente_id: Optional[str] = None # Opcional, si se sabe
+
+@app.post("/api/auto-schedule")
+def auto_schedule_trips(req: AutoScheduleRequest, db: Session = Depends(get_db)):
+
+    try:
+        # 1. Obtener recursos disponibles desde API CloudFleet (con filtros locales)
+        vehiculos = listar_vehiculos(sede_id=req.sede_id, cliente_id=req.cliente_id, ciudad=None, centro_costo=None)
+        personal = listar_personal(sede_id=req.sede_id, cliente_id=req.cliente_id, ciudad=None, rol=None)
+        
+        conductores = [p for p in personal if "conductor" in (p.rol or "").lower()]
+        auxiliares = [p for p in personal if "auxiliar" in (p.rol or "").lower()]
+        
+        # Logica Greedy: Asignacion directa en orden
+        created_ids = []
+        fecha_obj = datetime.strptime(req.fecha, "%Y-%m-%d").date()
+        
+        for i in range(req.quota):
+            # Asignar recursos si hay disponibles (Slot i toma recurso i)
+            v_id = vehiculos[i].id if i < len(vehiculos) else None
+            c_id = conductores[i].id if i < len(conductores) else None
+            a_id = auxiliares[i].id if i < len(auxiliares) else None
+            
+            # Crear Viaje Cabecera
+            nuevo_viaje = Viaje(
+                cliente_id=req.cliente_id or "UNKNOWN", 
+                sede_id=req.sede_id,
+                fecha=fecha_obj,
+                estado="borrador"
+            )
+            db.add(nuevo_viaje)
+            db.flush() # Para obtener ID
+            
+            # Crear Detalle
+            detalle = ViajeDetalle(
+                viaje_id=nuevo_viaje.id,
+                vehiculo_id=v_id,
+                conductor_id=c_id,
+                auxiliar_id=a_id,
+                notas="Generado automaticamente"
+            )
+            db.add(detalle)
+            created_ids.append(nuevo_viaje.id)
+            
+        db.commit()
+        return {"message": f"{len(created_ids)} viajes generados", "ids": created_ids}
+
+    except Exception as e:
+        db.rollback()
+        tb = traceback.format_exc()
+        logger.error(f"Error scheduler: {tb}")
+        raise HTTPException(status_code=500, detail=tb)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+

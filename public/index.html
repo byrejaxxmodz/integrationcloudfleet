@@ -1,5 +1,6 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -170,6 +171,43 @@
             font-weight: 700;
         }
 
+        .trip-section {
+            background: white;
+            padding: 24px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+            align-items: end;
+        }
+
+        .trip-section h2 {
+            grid-column: 1 / -1;
+            color: #4b5cc4;
+        }
+
+        .trip-select {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .trip-select label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .trip-summary {
+            grid-column: 1 / -1;
+            background: #f8f9ff;
+            border: 1px solid #e1e4ff;
+            border-radius: 12px;
+            padding: 14px 16px;
+            color: #27305a;
+        }
+
         .loading,
         .empty {
             text-align: center;
@@ -198,7 +236,9 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .error {
@@ -294,7 +334,7 @@
             padding: 6px 10px;
             font-size: 0.9em;
             line-height: 1.2;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
         .via-pill .via-code {
@@ -353,6 +393,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -389,12 +430,12 @@
             </div>
             <div class="filters-row">
                 <div class="filter-group">
-                    <label for="filterRouteCode">Código de ruta (sugerido)</label>
+                    <label for="filterRouteCode">Codigo de ruta (sugerido)</label>
                     <input type="text" id="filterRouteCode" placeholder="Ej: CHL-YUM-VAR">
                     <span class="hint">Se arma con cliente + ciudad y el sufijo VAR.</span>
                 </div>
                 <div class="filter-group">
-                    <label for="filterViaCode">Vía (viaCode)</label>
+                    <label for="filterViaCode">Via (viaCode)</label>
                     <input type="text" id="filterViaCode" placeholder="Ej: RYP">
                     <span class="hint">Opcional: usa viaCode para reducir los viajes.</span>
                 </div>
@@ -438,16 +479,77 @@
                 </div>
             </div>
         </div>
+
+        <div class="trip-section">
+            <h2>Crear Viaje (CloudFleet)</h2>
+            <div class="trip-select">
+                <label for="tripFecha">Fecha</label>
+                <input type="date" id="tripFecha">
+            </div>
+            <div class="trip-select">
+                <label for="tripCliente">Cliente</label>
+                <select id="tripCliente"></select>
+            </div>
+            <div class="trip-select">
+                <label for="tripCiudad">Ciudad</label>
+                <input type="text" id="tripCiudad" placeholder="Ej: Bogota">
+            </div>
+            <div class="trip-select">
+                <label for="tripVehiculo">Vehiculo</label>
+                <select id="tripVehiculo"></select>
+            </div>
+            <div class="trip-select">
+                <label for="tripRuta">Ruta</label>
+                <select id="tripRuta"></select>
+            </div>
+            <div class="trip-select">
+                <label for="tripVia">Via</label>
+                <select id="tripVia"></select>
+            </div>
+            <div class="trip-select">
+                <label for="tripConductor">Conductor</label>
+                <select id="tripConductor"></select>
+            </div>
+            <div class="trip-select">
+                <label for="tripAuxiliar">Auxiliar</label>
+                <select id="tripAuxiliar"></select>
+            </div>
+            <div class="actions">
+                <button id="tripBuscarBtn" onclick="buscarDesdeTrip()">Buscar Recursos</button>
+                <button id="btnGuardarViaje" onclick="guardarViaje()">Confirmar y Crear Viaje</button>
+                <button class="secondary" onclick="limpiarFiltros()">Limpiar</button>
+            </div>
+            <div class="trip-summary" id="tripSummary">
+                Selecciona los datos y pulsa "Confirmar" para crear el viaje en base de datos.
+            </div>
+        </div>
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:8003';
+        const API_BASE = 'http://localhost:8000';
         let clientesData = [];
         let vehiculosData = [];
         let personalData = [];
         let rutasData = [];
         let soloActivos = true;
         let isLoading = false;
+        let rutasDataFull = [];
+        let vehiculosDataTrip = [];
+        let personalDataTrip = [];
+        let rutasDataTrip = [];
+        const tripState = {
+            clienteId: '',
+            ciudad: '',
+            vehiculoId: '',
+            rutaCodigo: '',
+            viaCode: '',
+            conductorId: '',
+            auxiliarId: ''
+        };
+        let tripLoading = false;
+        let tripAbortController = null;
+        let tripSyncTimeout = null;
+        let tripFiltersSyncing = false;
 
         function setLoading(flag) {
             isLoading = flag;
@@ -473,11 +575,11 @@
                 .join('&');
         };
 
-        const VOWELS = 'AEIOUÁÉÍÓÚÜ';
+        const VOWELS = 'AEIOU';
 
         const abbrCandidates = (text, length = 3) => {
             if (!text) return [];
-            const chars = (text.toUpperCase().match(/[A-ZÁÉÍÓÚÜÑ]/g) || []);
+            const chars = (text.toUpperCase().match(/[A-Z']/g) || []);
             if (!chars.length) return [];
             const simple = chars.join('').slice(0, length);
             const consonants = chars.filter(c => !VOWELS.includes(c)).join('').slice(0, length);
@@ -487,6 +589,16 @@
                 if (trimmed && !opts.includes(trimmed)) opts.push(trimmed);
             });
             return opts;
+        };
+
+        const uniqueValues = (arr) => {
+            const seen = new Set();
+            return arr.filter(v => {
+                const key = JSON.stringify(v);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
         };
 
         const buildRouteCode = (clienteId, ciudad) => {
@@ -505,12 +617,7 @@
 
         const normalizeRouteCode = (code) => {
             if (!code) return '';
-            const clean = code.toUpperCase().trim();
-            const parts = clean.split('-').filter(Boolean);
-            if (parts.length === 2) {
-                return `${parts[0]}-${parts[1]}-VAR`;
-            }
-            return clean;
+            return code.toUpperCase().trim();
         };
 
         function sugerirRouteCode() {
@@ -537,35 +644,156 @@
             });
             await cargarClientes();
             sugerirRouteCode();
-            // No cargamos datos pesados hasta que el usuario aplique filtros.
-            document.getElementById('vehiculosContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
-            document.getElementById('personalContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
-            document.getElementById('rutasContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
+            inicializarTripSelectors();
+            document.getElementById('tripFecha').valueAsDate = new Date(); // Fecha por defecto hoy
+
+            // Auto-load data on start as per user request ("Antes... traia las rutas")
+            await cargarDatos();
         }
 
         async function cargarClientes() {
             const select = document.getElementById('filterCliente');
+            const tripSelect = document.getElementById('tripCliente');
             try {
                 const response = await fetch(`${API_BASE}/clientes`);
                 if (!response.ok) throw new Error('No se pudieron cargar los clientes');
                 clientesData = await response.json();
 
                 select.innerHTML = '';
+                tripSelect.innerHTML = '';
                 const optionAll = document.createElement('option');
                 optionAll.value = '';
                 optionAll.textContent = 'Todos los clientes';
                 select.appendChild(optionAll);
+
+                const tripOptionAll = document.createElement('option');
+                tripOptionAll.value = '';
+                tripOptionAll.textContent = 'Selecciona cliente';
+                tripSelect.appendChild(tripOptionAll);
 
                 clientesData.forEach((c) => {
                     const opt = document.createElement('option');
                     opt.value = c.id;
                     opt.textContent = c.nombre || `Cliente ${c.id}`;
                     select.appendChild(opt);
+
+                    const optTrip = document.createElement('option');
+                    optTrip.value = c.id;
+                    optTrip.textContent = c.nombre || `Cliente ${c.id}`;
+                    tripSelect.appendChild(optTrip);
                 });
+
+                if (tripState.clienteId) {
+                    tripSelect.value = tripState.clienteId;
+                }
             } catch (error) {
                 console.error(error);
                 select.innerHTML = '<option value=\"\">Error al cargar clientes</option>';
+                tripSelect.innerHTML = '<option value=\"\">Error al cargar clientes</option>';
             }
+        }
+
+        function tripCityMatchFn(ciudad) {
+            const c = (ciudad || '').toLowerCase();
+            return (val) => (val || '').toLowerCase().includes(c);
+        }
+
+        function setOptions(selectEl, items, { valueKey, labelKey, placeholder = 'Selecciona...', filterFn } = {}) {
+            const prev = selectEl.value;
+            selectEl.innerHTML = '';
+            const ph = document.createElement('option');
+            ph.value = '';
+            ph.textContent = placeholder;
+            selectEl.appendChild(ph);
+            items.filter(i => !filterFn || filterFn(i)).forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item[valueKey];
+                opt.textContent = item[labelKey];
+                selectEl.appendChild(opt);
+            });
+            if (items.some(i => i[valueKey] === prev)) {
+                selectEl.value = prev;
+            } else {
+                selectEl.value = '';
+            }
+        }
+
+        function inicializarTripSelectors() {
+            const tripCliente = document.getElementById('tripCliente');
+            const tripCiudad = document.getElementById('tripCiudad');
+            const tripVehiculo = document.getElementById('tripVehiculo');
+            const tripRuta = document.getElementById('tripRuta');
+            const tripVia = document.getElementById('tripVia');
+            const tripConductor = document.getElementById('tripConductor');
+            const tripAuxiliar = document.getElementById('tripAuxiliar');
+
+            tripCliente.addEventListener('change', e => { tripState.clienteId = e.target.value; actualizarTripOptions(); });
+            tripCiudad.addEventListener('input', e => { tripState.ciudad = e.target.value.trim(); actualizarTripOptions(); });
+            tripVehiculo.addEventListener('change', e => { tripState.vehiculoId = e.target.value; actualizarTripSummary(); });
+            tripRuta.addEventListener('change', e => {
+                tripState.rutaCodigo = e.target.value;
+                tripState.viaCode = '';
+                poblarVias();
+                actualizarTripSummary();
+            });
+            tripVia.addEventListener('change', e => { tripState.viaCode = e.target.value; actualizarTripSummary(); });
+            tripConductor.addEventListener('change', e => { tripState.conductorId = e.target.value; actualizarTripSummary(); });
+            tripAuxiliar.addEventListener('change', e => { tripState.auxiliarId = e.target.value; actualizarTripSummary(); });
+
+            // Sincronizar con filtros existentes
+            tripCliente.addEventListener('change', () => { cargarDatosTripDebounced(); aplicarFiltrosDesdeTripDebounced(); });
+            tripCiudad.addEventListener('input', () => { cargarDatosTripDebounced(); aplicarFiltrosDesdeTripDebounced(); });
+            tripRuta.addEventListener('change', () => { cargarDatosTripDebounced(); aplicarFiltrosDesdeTripDebounced(); });
+            tripVia.addEventListener('change', () => { cargarDatosTripDebounced(); aplicarFiltrosDesdeTripDebounced(); });
+        }
+
+        function syncTripInputsFromState() {
+            document.getElementById('tripCliente').value = tripState.clienteId || '';
+            document.getElementById('tripCiudad').value = tripState.ciudad || '';
+        }
+
+        function aplicarFiltrosDesdeTripDebounced() {
+            clearTimeout(tripSyncTimeout);
+            tripSyncTimeout = setTimeout(aplicarFiltrosDesdeTrip, 300);
+        }
+
+        function aplicarFiltrosDesdeTrip() {
+            if (tripFiltersSyncing) return;
+            tripFiltersSyncing = true;
+            const filterCliente = document.getElementById('filterCliente');
+            const filterCiudad = document.getElementById('filterCiudad');
+            const filterRoute = document.getElementById('filterRouteCode');
+            const filterVia = document.getElementById('filterViaCode');
+
+            filterCliente.value = tripState.clienteId || '';
+            filterCiudad.value = tripState.ciudad || '';
+            filterRoute.value = tripState.rutaCodigo || '';
+            filterVia.value = tripState.viaCode || '';
+
+            aplicarFiltros().finally(() => {
+                tripFiltersSyncing = false;
+            });
+        }
+
+        async function buscarDesdeTrip() {
+            // Sincroniza filtros con el armador y usa una sola llamada al backend
+            const filterCliente = document.getElementById('filterCliente');
+            const filterCiudad = document.getElementById('filterCiudad');
+            const filterRoute = document.getElementById('filterRouteCode');
+            const filterVia = document.getElementById('filterViaCode');
+
+            filterCliente.value = tripState.clienteId || '';
+            filterCiudad.value = tripState.ciudad || '';
+            filterRoute.value = tripState.rutaCodigo || '';
+            filterVia.value = tripState.viaCode || '';
+
+            await aplicarFiltros();
+            // Reutiliza los datos ya cargados en tablas para el armador
+            vehiculosDataTrip = vehiculosData;
+            personalDataTrip = personalData;
+            rutasDataTrip = rutasDataFull.length ? rutasDataFull : rutasData;
+            actualizarTripOptions();
+            actualizarTripSummary();
         }
 
         async function cargarDatos() {
@@ -581,18 +809,24 @@
             if (!routeCodeInput.value && autoRouteCode) {
                 routeCodeInput.value = autoRouteCode;
                 routeCodeInput.dataset.auto = 'true';
-            } else if (routeCode && routeCodeInput.value) {
-                routeCodeInput.value = routeCode;
             }
             const viaCode = viaCodeInput.value.trim().toUpperCase();
+
+            tripState.clienteId = clienteId;
+            tripState.ciudad = ciudad;
+            tripState.rutaCodigo = routeCode;
+            tripState.viaCode = viaCode;
+            syncTripInputsFromState();
 
             try {
                 await Promise.all([
                     cargarVehiculos({ clienteId, ciudad }),
                     cargarPersonal({ clienteId, ciudad, rol, soloActivos }),
                     cargarRutas({ clienteId, ciudad, routeCode, viaCode }),
+                    cargarRutasTodas(),
                 ]);
                 actualizarEstadisticas();
+                actualizarTripOptions();
             } finally {
                 setLoading(false);
             }
@@ -665,7 +899,7 @@
                 if (!response.ok) throw new Error('Error al cargar personal');
 
                 personalData = await response.json();
-                // Filtro defensivo en front por si la API devuelve más datos de los solicitados
+                // Filtro defensivo en front por si la API devuelve mas datos de los solicitados
                 personalData = personalData.filter(p => {
                     const activoOk = !soloActivos || p.activo !== false;
                     const rolOk = !rol || (p.rol || '').toLowerCase().includes(rol.toLowerCase());
@@ -694,8 +928,8 @@
                             </thead>
                             <tbody>
                                 ${personalData.map(p => {
-                                    const rolLabel = (p.rol || '').toLowerCase().includes('auxiliar') ? 'Auxiliar' : 'Conductor';
-                                    return `
+                    const rolLabel = (p.rol || '').toLowerCase().includes('auxiliar') ? 'Auxiliar' : 'Conductor';
+                    return `
                                         <tr>
                                             <td><strong>${p.nombre || 'Sin nombre'}</strong></td>
                                             <td>
@@ -710,7 +944,7 @@
                                             </td>
                                         </tr>
                                     `;
-                                }).join('')}
+                }).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -725,11 +959,13 @@
             }
         }
 
+        const RUTAS_ENDPOINT = '/rutas_v2';
+
         async function cargarRutas({ clienteId = '', ciudad = '', routeCode = '', viaCode = '' } = {}) {
             try {
-                const url = `${API_BASE}/rutas${buildQuery({
-                    cliente_id: clienteId,
-                    ciudad: ciudad || undefined,
+                const url = `${API_BASE}${RUTAS_ENDPOINT}${buildQuery({
+                    cliente_id: routeCode ? undefined : clienteId,
+                    ciudad: routeCode ? undefined : (ciudad || undefined),
                     route_code: routeCode || undefined,
                     via_code: viaCode || undefined,
                 })}`;
@@ -737,6 +973,13 @@
                 if (!response.ok) throw new Error('Error al cargar rutas');
 
                 rutasData = await response.json();
+                if (!routeCode) {
+                    rutasData = rutasData.filter(r => {
+                        const ciudadOk = !ciudad || tripCityMatchFn(ciudad)(r.origen) || tripCityMatchFn(ciudad)(r.destino);
+                        const clienteOk = !clienteId || (`${r.cliente_id}` === `${clienteId}`);
+                        return ciudadOk && clienteOk;
+                    });
+                }
                 document.getElementById('rutasCount').textContent = rutasData.length;
 
                 const content = document.getElementById('rutasContent');
@@ -746,52 +989,52 @@
                 }
 
                 const html = `
-                    <div class="table-container">
-                        <table>
-                            <thead>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Codigo</th>
+                            <th>Nombre</th>
+                            <th>Origen</th>
+                            <th>Destino</th>
+                            <th>Vias</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rutasData.map(r => {
+                    const viasDetalle = (r.vias_detalle || []).map(v => {
+                        const code = v.code || '';
+                        const name = v.name || '';
+                        if (!code && !name) return '';
+                        return `<span class="via-pill"><span class="via-code">${code}</span><span class="via-name">${name}</span></span>`;
+                    }).filter(Boolean);
+                    const viasFallback = (r.vias && r.vias.length)
+                        ? r.vias.map(v => `<span class="via-pill"><span class="via-code">${v}</span></span>`)
+                        : [];
+                    if (!viasDetalle.length && !viasFallback.length) {
+                        viasFallback.push(`<span class="via-pill"><span class="via-name">${r.via_codigo || r.datos_adicionales?.viaCode || r.datos_adicionales?.via?.name || 'N/D'}</span></span>`);
+                    }
+                    const viasHtml = `<div class="vias-chips">${(viasDetalle.length ? viasDetalle : viasFallback).join('')}</div>`;
+                    return `
                                 <tr>
-                                    <th>Codigo</th>
-                                    <th>Nombre</th>
-                                    <th>Origen</th>
-                                    <th>Destino</th>
-                                    <th>Vías</th>
-                                    <th>Estado</th>
+                                    <td><strong>${r.codigo || 'SIN-COD'}</strong></td>
+                                    <td>${r.nombre || 'Sin nombre'}</td>
+                                    <td>${r.origen || 'N/D'}</td>
+                                    <td>${r.destino || 'N/D'}</td>
+                                    <td>${viasHtml}</td>
+                                    <td>
+                                        <span class="status ${r.activa === false ? 'inactive' : 'active'}">
+                                            ${r.activa === false ? 'Inactiva' : 'Activa'}
+                                        </span>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                ${rutasData.map(r => {
-                                    const viasDetalle = (r.vias_detalle || []).map(v => {
-                                        const code = v.code || '';
-                                        const name = v.name || '';
-                                        if (!code && !name) return '';
-                                        return `<span class="via-pill"><span class="via-code">${code}</span><span class="via-name">${name}</span></span>`;
-                                    }).filter(Boolean);
-                                    const viasFallback = (r.vias && r.vias.length)
-                                        ? r.vias.map(v => `<span class="via-pill"><span class="via-code">${v}</span></span>`)
-                                        : [];
-                                    if (!viasDetalle.length && !viasFallback.length) {
-                                        viasFallback.push(`<span class="via-pill"><span class="via-name">${r.via_codigo || r.datos_adicionales?.viaCode || r.datos_adicionales?.via?.name || 'N/D'}</span></span>`);
-                                    }
-                                    const viasHtml = `<div class="vias-chips">${(viasDetalle.length ? viasDetalle : viasFallback).join('')}</div>`;
-                                    return `
-                                        <tr>
-                                            <td><strong>${r.codigo || 'SIN-COD'}</strong></td>
-                                            <td>${r.nombre || 'Sin nombre'}</td>
-                                            <td>${r.origen || 'N/D'}</td>
-                                            <td>${r.destino || 'N/D'}</td>
-                                            <td>${viasHtml}</td>
-                                            <td>
-                                                <span class="status ${r.activa === false ? 'inactive' : 'active'}">
-                                                    ${r.activa === false ? 'Inactiva' : 'Activa'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    `;
-                                }).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                `;
+                            `;
+                }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
 
                 content.innerHTML = html;
             } catch (error) {
@@ -799,6 +1042,19 @@
                 document.getElementById('rutasCount').textContent = '0';
                 document.getElementById('rutasContent').innerHTML =
                     `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+
+        async function cargarRutasTodas() {
+            try {
+                const response = await fetch(`${API_BASE}${RUTAS_ENDPOINT}`);
+                if (!response.ok) throw new Error('Error al cargar rutas completas');
+                const data = await response.json();
+                rutasDataFull = data;
+            } catch (error) {
+                console.error('No se pudieron cargar todas las rutas:', error);
+                if (!rutasDataFull.length) rutasDataFull = rutasData;
             }
         }
 
@@ -839,11 +1095,306 @@
             document.getElementById('stats').innerHTML = html;
         }
 
+        // ======== Armador de viaje ========
+        function actualizarTripOptions() {
+            const tripCliente = document.getElementById('tripCliente');
+            const tripCiudad = document.getElementById('tripCiudad');
+            const tripVehiculo = document.getElementById('tripVehiculo');
+            const tripRuta = document.getElementById('tripRuta');
+            const tripConductor = document.getElementById('tripConductor');
+            const tripAuxiliar = document.getElementById('tripAuxiliar');
+
+            const clienteOpts = clientesData.map(c => ({ value: c.id, label: c.nombre || `Cliente ${c.id}` }));
+            setOptions(tripCliente, clienteOpts, { valueKey: 'value', labelKey: 'label', placeholder: 'Cliente (opcional)' });
+
+            if (!tripState.ciudad && document.getElementById('filterCiudad').value) {
+                tripState.ciudad = document.getElementById('filterCiudad').value.trim();
+                tripCiudad.value = tripState.ciudad;
+            }
+
+            const vehSource = vehiculosDataTrip.length ? vehiculosDataTrip : vehiculosData;
+            const persSource = personalDataTrip.length ? personalDataTrip : personalData;
+            const rutaSource = rutasDataTrip.length ? rutasDataTrip : (rutasDataFull.length ? rutasDataFull : rutasData);
+
+            const cityFilter = tripCityMatchFn(tripState.ciudad);
+            const vehiculoOpts = vehSource
+                .filter(v => {
+                    const cityVal = v.ubicacion_ciudad || v.datos_adicionales?.city?.name || '';
+                    return !tripState.ciudad || cityFilter(cityVal);
+                })
+                .map(v => {
+                    const cityVal = v.ubicacion_ciudad || v.datos_adicionales?.city?.name || 'N/D';
+                    return ({ value: v.id, label: `${v.placa} (${cityVal})` });
+                });
+            setOptions(tripVehiculo, vehiculoOpts, { valueKey: 'value', labelKey: 'label', placeholder: 'Vehiculo' });
+
+            const rutaOpts = rutaSource
+                .filter(r => {
+                    const cityMatch = !tripState.ciudad || tripCityMatchFn(tripState.ciudad)(r.origen) || tripCityMatchFn(tripState.ciudad)(r.destino);
+                    const clientMatch = !tripState.clienteId || String(r.cliente_id) === String(tripState.clienteId);
+                    return cityMatch && clientMatch;
+                })
+                .map(r => ({ value: r.id, label: `${r.codigo} (${r.nombre || 'Sin nombre'})` }));
+            setOptions(tripRuta, rutaOpts, { valueKey: 'value', labelKey: 'label', placeholder: 'Ruta' });
+
+            const personalCityFilter = tripCityMatchFn(tripState.ciudad);
+            const personalFiltrado = persSource.filter(p => {
+                const cityVal = (
+                    p.ubicacion_ciudad ||
+                    (typeof p.city === 'string' ? p.city : p.city?.name) ||
+                    p.datos_adicionales?.city?.name ||
+                    ''
+                );
+                return !tripState.ciudad || personalCityFilter(cityVal);
+            });
+            const conductores = personalFiltrado.filter(p => (p.rol || '').toLowerCase().includes('conductor') || (p.rol || '').toLowerCase().includes('driver'));
+            const auxiliares = personalFiltrado.filter(p => (p.rol || '').toLowerCase().includes('auxiliar') || (p.rol || '').toLowerCase().includes('helper'));
+            setOptions(tripConductor, conductores.map(p => ({ value: p.id, label: `${p.nombre} (${p.documento || 's/doc'})` })), { valueKey: 'value', labelKey: 'label', placeholder: 'Conductor' });
+            setOptions(tripAuxiliar, auxiliares.map(p => ({ value: p.id, label: `${p.nombre} (${p.documento || 's/doc'})` })), { valueKey: 'value', labelKey: 'label', placeholder: 'Auxiliar' });
+
+            poblarVias();
+            actualizarTripSummary();
+        }
+
+        function poblarVias() {
+            const tripRutaId = document.getElementById('tripRuta').value;
+            const tripVia = document.getElementById('tripVia');
+            const ruta = (rutasDataTrip.length ? rutasDataTrip : rutasDataFull.length ? rutasDataFull : rutasData).find(r => `${r.id}` === `${tripRutaId}` || r.codigo === tripRutaId);
+            const viasDetalle = ruta?.vias_detalle || [];
+            const viasCodigos = ruta?.vias || [];
+            const detalle = viasDetalle.map(v => ({ value: v.code || v.name || '', label: [v.code, v.name].filter(Boolean).join(' - ') }));
+            const simples = viasCodigos.map(v => ({ value: v, label: v }));
+            const vias = uniqueValues(detalle.length ? detalle : simples);
+            setOptions(tripVia, vias, { valueKey: 'value', labelKey: 'label', placeholder: 'Via' });
+        }
+
+        let tripLoadTimeout;
+        function cargarDatosTripDebounced() {
+            clearTimeout(tripLoadTimeout);
+            tripLoadTimeout = setTimeout(cargarDatosTrip, 400);
+        }
+
+        async function cargarDatosTrip() {
+            const clienteId = tripState.clienteId;
+            const ciudad = tripState.ciudad;
+            const viaCode = tripState.viaCode;
+            const rutaCode = tripState.rutaCodigo;
+
+            if (!clienteId && !ciudad && !rutaCode && !viaCode) {
+                vehiculosDataTrip = vehiculosData;
+                personalDataTrip = personalData;
+                rutasDataTrip = rutasDataFull.length ? rutasDataFull : rutasData;
+                actualizarTripOptions();
+                return;
+            }
+
+            if (tripAbortController) {
+                tripAbortController.abort();
+            }
+            tripAbortController = new AbortController();
+            const { signal } = tripAbortController;
+
+            let aborted = false;
+            tripLoading = true;
+            try {
+                const vehQuery = buildQuery({ cliente_id: clienteId || undefined, ciudad: ciudad || undefined });
+                const perQuery = buildQuery({ cliente_id: clienteId || undefined, ciudad: ciudad || undefined });
+                const rutaQuery = buildQuery({ cliente_id: clienteId || undefined, ciudad: ciudad || undefined, route_code: rutaCode || undefined, via_code: viaCode || undefined });
+                const [vehRes, perRes, rutRes] = await Promise.all([
+                    fetch(`${API_BASE}/vehiculos${vehQuery}`, { signal }),
+                    fetch(`${API_BASE}/personal${perQuery}`, { signal }),
+                    fetch(`${API_BASE}${RUTAS_ENDPOINT}${rutaQuery}`, { signal }),
+                ]);
+                if (!vehRes.ok || !perRes.ok || !rutRes.ok) throw new Error('Error al cargar datos de viaje');
+                vehiculosDataTrip = await vehRes.json();
+                personalDataTrip = await perRes.json();
+                rutasDataTrip = await rutRes.json();
+
+                const cityMatch = tripCityMatchFn(ciudad);
+                if (ciudad) {
+                    const vf = vehiculosDataTrip.filter(v => cityMatch(v.ubicacion_ciudad || v.datos_adicionales?.city?.name || ''));
+                    vehiculosDataTrip = vf.length ? vf : vehiculosDataTrip;
+                    const pf = personalDataTrip.filter(p => cityMatch(
+                        p.ubicacion_ciudad ||
+                        (typeof p.city === 'string' ? p.city : p.city?.name) ||
+                        p.datos_adicionales?.city?.name ||
+                        ''
+                    ));
+                    personalDataTrip = pf.length ? pf : personalDataTrip;
+                    const rf = rutasDataTrip.filter(r => cityMatch(r.origen) || cityMatch(r.destino));
+                    rutasDataTrip = rf.length ? rf : rutasDataTrip;
+                }
+                if (clienteId) {
+                    const vf = vehiculosDataTrip.filter(v => {
+                        const cid = v.datos_adicionales?.customerId || v.datos_adicionales?.cliente_id || v.cliente_id;
+                        const cityVal = v.ubicacion_ciudad || v.datos_adicionales?.city?.name || '';
+                        return !cid || `${cid}` === `${clienteId}` || cityMatch(cityVal);
+                    });
+                    vehiculosDataTrip = vf.length ? vf : vehiculosDataTrip;
+                    const pf = personalDataTrip.filter(p => {
+                        const cid = p.datos_adicionales?.customerId || p.datos_adicionales?.cliente_id || p.cliente_id;
+                        const cityVal = (
+                            p.ubicacion_ciudad ||
+                            (typeof p.city === 'string' ? p.city : p.city?.name) ||
+                            p.datos_adicionales?.city?.name ||
+                            ''
+                        );
+                        return !cid || `${cid}` === `${clienteId}` || cityMatch(cityVal);
+                    });
+                    personalDataTrip = pf.length ? pf : personalDataTrip;
+                    const rf = rutasDataTrip.filter(r => !r.cliente_id || `${r.cliente_id}` === `${clienteId}`);
+                    rutasDataTrip = rf.length ? rf : rutasDataTrip;
+                }
+
+                if (ciudad && vehiculosDataTrip.length < 2) {
+                    const vehCiudadRes = await fetch(`${API_BASE}/vehiculos${buildQuery({ ciudad })}`, { signal });
+                    if (vehCiudadRes.ok) {
+                        const vehCiudad = await vehCiudadRes.json();
+                        const seen = new Set(vehiculosDataTrip.map(v => `${v.id}`));
+                        vehCiudad
+                            .filter(v => cityMatch(v.ubicacion_ciudad || v.datos_adicionales?.city?.name || ''))
+                            .forEach(v => { if (!seen.has(`${v.id}`)) vehiculosDataTrip.push(v); });
+                    }
+                }
+                if (ciudad && personalDataTrip.length === 0) {
+                    const perCiudadRes = await fetch(`${API_BASE}/personal${buildQuery({ ciudad })}`, { signal });
+                    if (perCiudadRes.ok) {
+                        const perCiudad = await perCiudadRes.json();
+                        const seenPer = new Set(personalDataTrip.map(p => `${p.id}`));
+                        perCiudad
+                            .filter(p => cityMatch(
+                                p.ubicacion_ciudad ||
+                                (typeof p.city === 'string' ? p.city : p.city?.name) ||
+                                p.datos_adicionales?.city?.name ||
+                                ''
+                            ))
+                            .forEach(p => { if (!seenPer.has(`${p.id}`)) personalDataTrip.push(p); });
+                    }
+                }
+
+                const mergeVeh = vehiculosData
+                    .filter(v => (!clienteId || `${v.datos_adicionales?.customerId || v.cliente_id || ''}` === `${clienteId}` || cityMatch(v.ubicacion_ciudad || v.datos_adicionales?.city?.name || '')))
+                    .filter(v => (!ciudad || cityMatch(v.ubicacion_ciudad || v.datos_adicionales?.city?.name || '')));
+                if (mergeVeh.length && vehiculosDataTrip.length < mergeVeh.length) {
+                    const seen = new Set(vehiculosDataTrip.map(v => `${v.id}`));
+                    mergeVeh.forEach(v => { if (!seen.has(`${v.id}`)) vehiculosDataTrip.push(v); });
+                }
+
+                const mergePer = personalData
+                    .filter(p => (!clienteId || `${p.datos_adicionales?.customerId || p.cliente_id || ''}` === `${clienteId}` || cityMatch(p.ubicacion_ciudad || (typeof p.city === 'string' ? p.city : p.city?.name) || p.datos_adicionales?.city?.name || '')))
+                    .filter(p => (!ciudad || cityMatch(p.ubicacion_ciudad || (typeof p.city === 'string' ? p.city : p.city?.name) || p.datos_adicionales?.city?.name || '')));
+                if (mergePer.length && personalDataTrip.length < mergePer.length) {
+                    const seen = new Set(personalDataTrip.map(p => `${p.id}`));
+                    mergePer.forEach(p => { if (!seen.has(`${p.id}`)) personalDataTrip.push(p); });
+                }
+
+                const mergeRutas = (rutasDataFull.length ? rutasDataFull : rutasData)
+                    .filter(r => (!clienteId || `${r.cliente_id}` === `${clienteId}` || !r.cliente_id))
+                    .filter(r => (!ciudad || cityMatch(r.origen) || cityMatch(r.destino)));
+                if (mergeRutas.length && rutasDataTrip.length < mergeRutas.length) {
+                    const seen = new Set(rutasDataTrip.map(r => r.codigo));
+                    mergeRutas.forEach(r => { if (!seen.has(r.codigo)) rutasDataTrip.push(r); });
+                }
+            } catch (err) {
+                if (err?.name === 'AbortError') {
+                    aborted = true;
+                } else {
+                    console.error('Error cargando datos de viaje', err);
+                    vehiculosDataTrip = [];
+                    personalDataTrip = [];
+                    rutasDataTrip = [];
+                }
+            } finally {
+                tripLoading = false;
+                tripAbortController = null;
+                if (!aborted) {
+                    actualizarTripOptions();
+                }
+            }
+        }
+
+        function actualizarTripSummary() {
+            const resumen = document.getElementById('tripSummary');
+            const cliente = clientesData.find(c => `${c.id}` === `${document.getElementById('tripCliente').value}`);
+            const vehiculoSource = vehiculosDataTrip.length ? vehiculosDataTrip : vehiculosData;
+            const rutaSource = rutasDataTrip.length ? rutasDataTrip : (rutasDataFull.length ? rutasDataFull : rutasData);
+            const personalSource = personalDataTrip.length ? personalDataTrip : personalData;
+            const vehiculo = vehiculoSource.find(v => `${v.id}` === `${document.getElementById('tripVehiculo').value}`);
+            const ruta = rutaSource.find(r => `${r.codigo}` === `${document.getElementById('tripRuta').value}`);
+            const viaSel = document.getElementById('tripVia').value;
+            const conductor = personalSource.find(p => `${p.id}` === `${document.getElementById('tripConductor').value}`);
+            const auxiliar = personalSource.find(p => `${p.id}` === `${document.getElementById('tripAuxiliar').value}`);
+
+            resumen.innerHTML = `
+                <strong>Viaje (simulacion)</strong><br>
+                Cliente: ${cliente?.nombre || 'N/D'}<br>
+                Ciudad: ${document.getElementById('tripCiudad').value || 'N/D'}<br>
+                Vehiculo: ${vehiculo ? vehiculo.placa : 'N/D'}<br>
+                Ruta: ${ruta ? ruta.codigo : 'N/D'}<br>
+                Via: ${viaSel || 'N/D'}<br>
+                Conductor: ${conductor?.nombre || 'N/D'}<br>
+                Auxiliar: ${auxiliar?.nombre || 'N/D'}<br>
+                <em>Verifica los datos antes de confirmar.</em>
+            `;
+        }
+
+        async function guardarViaje() {
+            const fecha = document.getElementById('tripFecha').value;
+            const clienteId = document.getElementById('tripCliente').value;
+            const vehiculoId = document.getElementById('tripVehiculo').value;
+            const rutaParam = document.getElementById('tripRuta').value;
+            const conductorId = document.getElementById('tripConductor').value;
+            const auxiliarId = document.getElementById('tripAuxiliar').value;
+
+            if (!fecha || !vehiculoId || !conductorId) {
+                alert("Faltan datos obligatorios (Fecha, Vehiculo, Conductor)");
+                return;
+            }
+
+            const data = {
+                fecha: fecha,
+                cliente_id: clienteId ? parseInt(clienteId) : 0,
+                sede_id: 0,
+                detalles: [{
+                    ruta_id: rutaParam ? parseInt(rutaParam) : 0,
+                    vehiculo_id: vehiculoId,
+                    conductor_id: conductorId,
+                    auxiliar_id: auxiliarId || null,
+                    notas: "Creado desde CloudFleet Manager"
+                }]
+            };
+
+            const btn = document.getElementById('btnGuardarViaje');
+            const prevText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = "Guardando...";
+
+            try {
+                const res = await fetch(`${API_BASE}/api/trips`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    alert("Viaje creado exitosamente! ID: " + json.id);
+                } else {
+                    const err = await res.json();
+                    alert("Error creando viaje: " + (err.detail || JSON.stringify(err)));
+                }
+            } catch (e) {
+                alert("Error de red: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = prevText;
+            }
+        }
+
         async function aplicarFiltros() {
             await cargarDatos();
         }
 
-        function limpiarFiltros() {
+        async function limpiarFiltros() {
             document.getElementById('filterCliente').value = '';
             document.getElementById('filterCiudad').value = '';
             document.getElementById('filterRol').value = '';
@@ -851,18 +1402,23 @@
             document.getElementById('filterRouteCode').value = '';
             document.getElementById('filterRouteCode').dataset.auto = 'false';
             document.getElementById('filterViaCode').value = '';
-            document.getElementById('vehiculosContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
-            document.getElementById('personalContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
-            document.getElementById('rutasContent').innerHTML = '<div class="loading">Aplica filtros y pulsa "Buscar" para cargar datos</div>';
-            document.getElementById('vehiculosCount').textContent = '0';
-            document.getElementById('personalCount').textContent = '0';
-            document.getElementById('rutasCount').textContent = '0';
-            document.getElementById('stats').innerHTML = '';
-            setLoading(false);
+
             sugerirRouteCode();
+            tripState.clienteId = '';
+            tripState.ciudad = '';
+            tripState.vehiculoId = '';
+            tripState.rutaCodigo = '';
+            tripState.viaCode = '';
+            tripState.conductorId = '';
+            tripState.auxiliarId = '';
+            syncTripInputsFromState();
+
+            // Reload all data without filters
+            await cargarDatos();
         }
 
         window.addEventListener('load', inicializar);
     </script>
 </body>
+
 </html>

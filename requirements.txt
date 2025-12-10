@@ -1,4 +1,7 @@
+sqlalchemy
+pymysql
 fastapi
 uvicorn[standard]
 pydantic
 requests
+python-dotenv

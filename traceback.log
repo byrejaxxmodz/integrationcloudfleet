@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "C:\Users\57317\OneDrive\Escritorio\CLOUDFLEET\app\main.py", line 1330, in listar_vehiculos
+    if not ubicacion or ciudad.lower() not in ubicacion.lower():
+                        ^^^^^^^^^^^^
+AttributeError: 'Query' object has no attribute 'lower'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\57317\OneDrive\Escritorio\CLOUDFLEET\app\main.py", line 1653, in auto_schedule_trips
+    vehiculos = listar_vehiculos(sede_id=req.sede_id, cliente_id=req.cliente_id)
+  File "C:\Users\57317\OneDrive\Escritorio\CLOUDFLEET\app\main.py", line 1378, in listar_vehiculos
+    raise HTTPException(status_code=500, detail=f"Error al obtener vehiculos: {str(e)}")
+fastapi.exceptions.HTTPException: 500: Error al obtener vehiculos: 'Query' object has no attribute 'lower'

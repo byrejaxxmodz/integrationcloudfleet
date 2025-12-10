@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Despacho Diario - CloudFleet</title>
+    <!-- CSS Dependencies -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Outfit', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            900: '#0c4a6e',
+                        },
+                        dark: {
+                            bg: '#0f172a',
+                            card: '#1e293b',
+                            input: '#334155'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f1f5f9;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        .input-field {
+            transition: all 0.3s ease;
+            background: #1e293b;
+            border: 1px solid #475569;
+        }
+
+        .input-field:focus {
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+            outline: none;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+
+<body
+    class="min-h-screen bg-[url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop')] bg-cover bg-fixed bg-no-repeat">
+    <!-- Overlay for better text readability -->
+    <div class="fixed inset-0 bg-slate-900/90 pointer-events-none"></div>
+
+    <div class="relative z-10 max-w-7xl mx-auto px-4 py-8 space-y-8">
+
+        <!-- Navbar / Header -->
+        <header
+            class="flex flex-col md:flex-row justify-between items-center bg-slate-800/50 backdrop-blur-md border border-white/10 p-6 rounded-2xl shadow-xl">
+            <div class="flex items-center gap-4 mb-4 md:mb-0">
+                <div class="bg-blue-500/20 p-3 rounded-xl border border-blue-500/30">
+                    <i class="fas fa-satellite-dish text-2xl text-blue-400"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-white tracking-tight">Despacho Diario</h1>
+                    <p class="text-slate-400 text-sm">Simulador de Asignación de Recursos</p>
+                </div>
+            </div>
+            <a href="index.html"
+                class="group flex items-center gap-2 px-5 py-2.5 bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 rounded-xl transition-all border border-white/5 hover:border-white/10">
+                <i class="fas fa-arrow-left group-hover:-translate-x-1 transition-transform"></i>
+                <span>Volver al Dashboard</span>
+            </a>
+        </header>
+
+        <!-- Main Content Grid -->
+        <main class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+            <!-- Controls Sidebar -->
+            <aside class="lg:col-span-4 space-y-6">
+                <div class="glass-panel p-6 rounded-2xl space-y-6 relative overflow-hidden">
+                    <div
+                        class="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none">
+                    </div>
+
+                    <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                        <i class="fas fa-sliders-h text-blue-400"></i> Configuración
+                    </h2>
+
+                    <!-- Inputs -->
+                    <div class="space-y-4">
+                        <div class="group">
+                            <label
+                                class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider ml-1">Cliente</label>
+                            <div class="relative">
+                                <i
+                                    class="fas fa-building absolute left-3 top-3.5 text-slate-500 group-focus-within:text-blue-400 transition-colors"></i>
+                                <select id="selCliente"
+                                    class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-slate-200 appearance-none cursor-pointer">
+                                    <option value="">Cargando clientes...</option>
+                                </select>
+                                <i
+                                    class="fas fa-chevron-down absolute right-3 top-3.5 text-slate-500 pointer-events-none"></i>
+                            </div>
+                        </div>
+
+                        <div class="group">
+                            <label
+                                class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider ml-1">Ciudad
+                                / Sede</label>
+                            <div class="relative">
+                                <i
+                                    class="fas fa-map-marker-alt absolute left-3 top-3.5 text-slate-500 group-focus-within:text-blue-400 transition-colors"></i>
+                                <input type="text" id="txtSede"
+                                    class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-slate-200 placeholder-slate-500"
+                                    placeholder="Ej: Yumbo, Bogota...">
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1 ml-1">Escribe para filtrar vehículos por ubicación.
+                            </p>
+                        </div>
+
+                        <div class="group">
+                            <label
+                                class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider ml-1">Fecha</label>
+                            <div class="relative">
+                                <i
+                                    class="fas fa-calendar absolute left-3 top-3.5 text-slate-500 group-focus-within:text-blue-400 transition-colors"></i>
+                                <input type="date" id="selFecha"
+                                    class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-slate-200 cursor-pointer">
+                            </div>
+                        </div>
+
+                        <!-- Hora de Llegada -->
+                        <div class="group">
+                            <label
+                                class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider ml-1">Hora
+                                Llegada</label>
+                            <div class="relative">
+                                <i
+                                    class="fas fa-clock absolute left-3 top-3.5 text-slate-500 group-focus-within:text-blue-400 transition-colors"></i>
+                                <input type="time" id="selHora" value="18:00"
+                                    class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-slate-200 cursor-pointer">
+                            </div>
+                        </div>
+
+                        <div class="group">
+                            <label
+                                class="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider ml-1">Cupos
+                                / Viajes</label>
+                            <div class="relative">
+                                <i
+                                    class="fas fa-layer-group absolute left-3 top-3.5 text-slate-500 group-focus-within:text-blue-400 transition-colors"></i>
+                                <input type="number" id="selQuota"
+                                    class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-slate-200" value="5"
+                                    min="1" max="50">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Button -->
+                    <button onclick="simularScheduler()"
+                        class="w-full relative group overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0">
+                        <span class="relative z-10 flex justify-center items-center gap-2">
+                            <i class="fas fa-search"></i>
+                            <span>Simular Disponibilidad</span>
+                        </span>
+                        <div
+                            class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+                        </div>
+                    </button>
+
+                    <div class="text-center">
+                        <span
+                            class="text-xs text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">
+                            <i class="fas fa-shield-alt mr-1"></i> Modo Seguro: Solo Lectura (GET)
+                        </span>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Results Area -->
+            <section class="lg:col-span-8">
+                <div class="glass-panel rounded-2xl p-1 h-full min-h-[500px] flex flex-col">
+                    <div class="p-5 border-b border-white/5 flex justify-between items-center bg-white/5 rounded-t-xl">
+                        <h2 class="font-semibold text-white flex items-center gap-2">
+                            <i class="fas fa-list-alt text-blue-400"></i> Resultados de Simulación
+                        </h2>
+                        <span id="statusBadge"
+                            class="text-xs font-mono text-slate-400 bg-slate-800 px-2 py-1 rounded border border-slate-700">ESPERANDO
+                            DATOS</span>
+                    </div>
+
+                    <div id="emptyState"
+                        class="flex-1 flex flex-col items-center justify-center text-slate-500 p-12 text-center">
+                        <div class="bg-slate-800/50 p-6 rounded-full mb-4 border border-slate-700/50">
+                            <i class="fas fa-robot text-4xl text-slate-600"></i>
+                        </div>
+                        <h3 class="text-lg font-medium text-slate-300 mb-1">El planificador está listo</h3>
+                        <p class="text-sm max-w-xs mx-auto">Configura los parámetros a la izquierda y presiona "Simular"
+                            para ver la asignación sugerida.</p>
+                    </div>
+
+                    <div id="resultContent" class="hidden flex-1 overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr
+                                    class="text-xs uppercase tracking-wider text-slate-400 border-b border-white/5 bg-white/5">
+                                    <th class="p-4 font-medium">Via</th>
+                                    <th class="p-4 font-medium">Vehículo</th>
+                                    <th class="p-4 font-medium">Conductor</th>
+                                    <th class="p-4 font-medium">Auxiliar</th>
+                                    <th class="p-4 font-medium text-right">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultTableBody" class="divide-y divide-white/5 text-sm">
+                                <!-- JS Injected Content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Logic -->
+    <script>
+        const API_BASE = "http://localhost:8000";
+
+        const cityValue = (item) => (
+            item?.ubicacion_ciudad ||
+            (typeof item?.city === 'string' ? item.city : item?.city?.name) ||
+            item?.datos_adicionales?.city?.name ||
+            ''
+        );
+
+        const matchesCity = (item, filtroCiudad) => {
+            if (!filtroCiudad) return true;
+            return cityValue(item).toLowerCase().includes(filtroCiudad.toLowerCase());
+        };
+
+        function obtenerViaLabel(ruta) {
+            if (!ruta) return 'SIN VIA';
+            const viaDetalle = (ruta.vias_detalle || []).find(v => v.code || v.name);
+            const via =
+                ruta.via_codigo ||
+                (viaDetalle ? (viaDetalle.code || viaDetalle.name) : '') ||
+                (ruta.vias && ruta.vias.length ? ruta.vias[0] : '') ||
+                ruta.datos_adicionales?.viaCode ||
+                ruta.datos_adicionales?.via?.name ||
+                '';
+            return (via || 'SIN VIA').toString().toUpperCase();
+        }
+
+        function obtenerEtiquetaRuta(ruta) {
+            if (!ruta) return 'Sin ruta';
+            if (ruta.nombre && ruta.codigo) return `${ruta.codigo} - ${ruta.nombre}`;
+            return ruta.codigo || ruta.nombre || 'Sin ruta';
+        }
+
+        async function init() {
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            document.getElementById('selFecha').valueAsDate = tomorrow;
+
+            try {
+                const res = await fetch(`${API_BASE}/clientes`);
+                const clientesData = await res.json();
+                const sel = document.getElementById('selCliente');
+                sel.innerHTML = '<option value="">-- Seleccionar Cliente --</option>';
+                clientesData.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = c.nombre || `Cliente ${c.id}`;
+                    sel.appendChild(opt);
+                });
+            } catch (e) {
+                console.error("Error loading clients", e);
+            }
+        }
+
+        async function simularScheduler() {
+            const inputSede = document.getElementById('txtSede').value.trim();
+            const clienteId = document.getElementById('selCliente').value;
+            const quota = parseInt(document.getElementById('selQuota').value);
+            const hora = document.getElementById('selHora') ? document.getElementById('selHora').value : "06:00";
+
+            if (!inputSede && !clienteId) {
+                alert("Por favor seleccione un cliente o escriba una ciudad/sede para filtrar.");
+                return;
+            }
+
+            const btn = document.querySelector('button[onclick="simularScheduler()"]');
+            const originalContent = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="flex items-center gap-2"><i class="fas fa-circle-notch fa-spin"></i> Resolviendo Sede...</span>';
+
+            try {
+                let sedeIdResolvido = null;
+                let ciudadFiltro = inputSede;
+
+                // 1. Smart Sede Resolution
+                if (inputSede) {
+                    try {
+                        const urlSedes = new URLSearchParams();
+                        if (clienteId) urlSedes.append('cliente_id', clienteId);
+                        const resSedes = await fetch(`${API_BASE}/sedes?${urlSedes}`);
+                        if (resSedes.ok) {
+                            const sedes = await resSedes.json();
+                            const match = sedes.find(s =>
+                                (s.name || "").toLowerCase().includes(inputSede.toLowerCase()) ||
+                                (s.city || "").toLowerCase() === inputSede.toLowerCase()
+                            );
+                            if (match) {
+                                console.log("Sede Resuelta:", match);
+                                sedeIdResolvido = match.id;
+                                ciudadFiltro = match.city || match.name;
+                            }
+                        }
+                    } catch (errSede) { console.warn("Resolution failed", errSede); }
+                }
+
+                btn.innerHTML = '<span class="flex items-center gap-2"><i class="fas fa-circle-notch fa-spin"></i> Simulando...</span>';
+
+                // 2. Fetch Data
+                // Vehiculos: Filter by Sede ID if resolved, else Fuzzy City
+                const urlParamsVeh = new URLSearchParams();
+
+                // CRITICAL FIX: Do NOT filter by client_id if searching by City/Sede. 
+                // Many vehicles have missing customerId but valid Cost Centers, causing backend to hide them if client_id is sent.
+
+                if (ciudadFiltro) {
+                    urlParamsVeh.append('ciudad', ciudadFiltro);
+                } else if (sedeIdResolvido) {
+                    urlParamsVeh.append('sede_id', sedeIdResolvido);
+                    if (clienteId) urlParamsVeh.append('cliente_id', clienteId);
+                } else if (clienteId) {
+                    urlParamsVeh.append('cliente_id', clienteId);
+                }
+
+                // Personal: Filter by City
+                const urlParamsPer = new URLSearchParams();
+                if (clienteId) urlParamsPer.append('cliente_id', clienteId);
+                if (ciudadFiltro) urlParamsPer.append('ciudad', ciudadFiltro);
+
+                // Rutas: Filter by Client. Only filter by city if we are SURE (Sede Resolved)
+                const urlParamsRuta = new URLSearchParams();
+                if (clienteId) urlParamsRuta.append('cliente_id', clienteId);
+                if (sedeIdResolvido && ciudadFiltro) {
+                    urlParamsRuta.append('ciudad', ciudadFiltro);
+                }
+
+                const [resVeh, resPer, resRutas] = await Promise.all([
+                    fetch(`${API_BASE}/vehiculos?${urlParamsVeh}`),
+                    fetch(`${API_BASE}/personal?${urlParamsPer}`),
+                    fetch(`${API_BASE}/rutas_v2?${urlParamsRuta}`)
+                ]);
+
+                const vehiculos = await resVeh.json();
+                const personal = await resPer.json();
+                const rutas = await resRutas.json();
+
+                // Filtrar personal y conductores
+                const personalFiltrado = personal
+                    .filter(p => p.activo !== false)
+                    .filter(p => matchesCity(p, ciudadFiltro));
+
+                const conductores = personalFiltrado.filter(p => (p.rol || "").toLowerCase().includes("conductor"));
+                const auxiliares = personalFiltrado.filter(p => (p.rol || "").toLowerCase().includes("auxiliar"));
+
+                console.log("Resolved Sede:", sedeIdResolvido, "City:", ciudadFiltro);
+                console.log("Vehiculos:", vehiculos.length, "Rutas (Total available):", rutas.length);
+
+                // DEBUG: Check for PRU-PRU matches
+                const pruCheck = rutas.find(r => (r.codigo || "").includes("PRU"));
+                if (pruCheck) {
+                    console.log("DEBUG: PRU-PRU found in response:", pruCheck);
+                    // Check if it matches city
+                    const cityMatch = matchesCity({ ubicacion_ciudad: pruCheck.origen }, ciudadFiltro);
+                    if (!cityMatch) {
+                        console.warn("DEBUG: PRU-PRU found but CITY MISMATCH. Route City:", pruCheck.origen, "Filter:", ciudadFiltro);
+                        alert(`DEBUG: Ruta PRU-PRU encontrada pero la ciudad no coincide.\nRuta: ${pruCheck.origen}\nFiltro: ${ciudadFiltro}`);
+                    } else {
+                        console.log("DEBUG: PRU-PRU Matches City!");
+                    }
+                } else {
+                    console.warn("DEBUG: PRU-PRU NOT FOUND in Routes Response.");
+                    // alert("DEBUG: PRU-PRU no aparece en la respuesta de la API."); 
+                }
+
+                renderSimulation(quota, vehiculos, conductores, auxiliares, rutas, hora);
+
+                document.getElementById('statusBadge').className = 'text-xs font-mono text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded border border-emerald-400/20';
+                document.getElementById('statusBadge').innerHTML = '<i class="fas fa-check mr-1"></i> SIMULACIÓN OK';
+
+            } catch (e) {
+                alert("Error al simular: " + e);
+                console.error(e);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }
+        }
+
+        function renderSimulation(quota, vehiculos, conductores, auxiliares, rutas, hora) {
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('resultContent').classList.remove('hidden');
+
+            const tbody = document.getElementById('resultTableBody');
+            tbody.innerHTML = '';
+
+            // 1. Pre-calculate "Route Candidates" (Route + Specific Via combination)
+            const routeCandidates = [];
+
+            // Helper to get city string safely
+            const getLoc = (r) => (cityValue({ ubicacion_ciudad: r.origen }) || "").toLowerCase();
+            const getLocDest = (r) => (cityValue({ ubicacion_ciudad: r.destino }) || "").toLowerCase();
+
+            for (const r of rutas) {
+                const viasList = [];
+                // Collect all valid Vias from the route object
+                if (r.vias_detalle && r.vias_detalle.length > 0) {
+                    r.vias_detalle.forEach(vd => viasList.push({ code: vd.code || vd.name, name: vd.name || vd.code }));
+                } else if (r.vias && r.vias.length > 0) {
+                    r.vias.forEach(v => viasList.push({ code: v, name: v }));
+                }
+
+                // If the route has vias, create a candidate for EACH via
+                if (viasList.length > 0) {
+                    viasList.forEach(v => {
+                        routeCandidates.push({ route: r, specificVia: v });
+                    });
+                } else {
+                    // If no explicit vias, just add the route itself as a candidate
+                    routeCandidates.push({ route: r, specificVia: null });
+                }
+            }
+
+            for (let i = 0; i < quota; i++) {
+                const veh = vehiculos[i];
+                const cond = conductores[i];
+                const aux = auxiliares[i];
+
+                // Smart Route Matching using Candidates
+                let assignment = undefined;
+
+                if (veh) {
+                    const vCity = cityValue(veh).toLowerCase();
+                    if (vCity) {
+                        // Find matching candidates based on City (Origin or Dest)
+                        const matches = routeCandidates.filter(c =>
+                            getLoc(c.route).includes(vCity) ||
+                            getLocDest(c.route).includes(vCity)
+                        );
+
+                        if (matches.length > 0) {
+                            // Round-robin through the specific candidates (Route+Via)
+                            assignment = matches[i % matches.length];
+                        }
+                    }
+                }
+
+                // Fallback: Global round-robin if no specific match
+                if (!assignment && routeCandidates.length > 0) {
+                    assignment = routeCandidates[i % routeCandidates.length];
+                }
+
+                const ruta = assignment ? assignment.route : null;
+                const viaAssigned = assignment ? assignment.specificVia : null;
+
+                // Determine Label
+                let viaLabel = 'SIN VIA';
+                let rutaInfo = 'Sin ruta asignada';
+
+                if (ruta) {
+                    rutaInfo = obtenerEtiquetaRuta(ruta);
+                    if (viaAssigned) {
+                        viaLabel = (viaAssigned.code || viaAssigned.name).toString().toUpperCase();
+                    } else {
+                        viaLabel = obtenerViaLabel(ruta);
+                    }
+                }
+
+                const vehClass = veh ? 'text-slate-200' : 'text-rose-400 italic';
+                const condClass = cond ? 'text-slate-200' : 'text-rose-400 italic';
+                const auxClass = aux ? 'text-slate-400' : 'text-slate-600';
+
+                const vehIcon = veh ? `<i class="fas fa-truck text-blue-400 mr-2"></i>` : `<i class="fas fa-times text-rose-500 mr-2"></i>`;
+                const condIcon = cond ? `<i class="fas fa-user text-purple-400 mr-2"></i>` : `<i class="fas fa-user-slash text-rose-500 mr-2"></i>`;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-white/5 transition-colors group";
+                tr.innerHTML = `
+                    <td class="p-4">
+                        <div class="flex flex-col">
+                            <span class="inline-flex items-center justify-center bg-indigo-500/20 text-indigo-100 px-3 py-1 rounded font-semibold text-xs border border-indigo-500/40">
+                                ${viaLabel}
+                            </span>
+                            <span class="text-[11px] text-slate-500 mt-2">${rutaInfo}</span>
+                            <span class="text-[10px] text-slate-600 mt-1"><i class="far fa-clock"></i> ${hora}</span>
+                        </div>
+                    </td>
+                    <td class="p-4">
+                        <div class="${vehClass} flex items-center">${vehIcon} ${veh ? veh.placa + ' <span class="text-xs text-slate-500 ml-1">(' + (veh.tipo || 'N/A') + ')</span>' : 'No disponible'}</div>
+                    </td>
+                    <td class="p-4">
+                        <div class="${condClass} flex items-center">${condIcon} ${cond ? cond.nombre : 'No disponible'}</div>
+                    </td>
+                    <td class="p-4">
+                        <div class="${auxClass}">${aux ? aux.nombre : '-'}</div>
+                    </td>
+                    <td class="p-4 text-right">
+                        <span class="text-xs font-medium text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-full border border-amber-400/20">
+                            BORRADOR
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
