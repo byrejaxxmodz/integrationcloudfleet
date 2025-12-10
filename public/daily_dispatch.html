@@ -308,6 +308,9 @@
                 });
             } catch (e) {
                 console.error("Error loading clients", e);
+                const sel = document.getElementById('selCliente');
+                sel.innerHTML = '<option value="">Error cargando clientes</option>';
+                alert("Error cargando datos. Verifique consola y variables de entorno (CLOUDFLEET_API_URL/TOKEN).");
             }
         }
 
