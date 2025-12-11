@@ -332,8 +332,20 @@
             }
 
             try {
-                const res = await fetch(`${API_BASE}/sedes?cliente_id=${clienteId}`);
+                // Encode clienteId to handle spaces like "CCM PRAXAIR"
+                const res = await fetch(`${API_BASE}/sedes?cliente_id=${encodeURIComponent(clienteId)}`);
+
+                if (!res.ok) {
+                    const errBody = await res.text();
+                    throw new Error(`Server Error ${res.status}: ${errBody}`);
+                }
+
                 const sedes = await res.json();
+
+                if (!Array.isArray(sedes)) {
+                    console.error("Respuesta Sede invalida:", sedes);
+                    throw new Error("Formato de respuesta inválido (se esperaba lista)");
+                }
 
                 selSede.innerHTML = '<option value="">Todas las Sedes</option>';
                 sedes.forEach(s => {
@@ -349,6 +361,7 @@
             } catch (e) {
                 console.error("Error cargando sedes:", e);
                 selSede.innerHTML = '<option value="">Error cargando sedes</option>';
+                alert(`Error cargando sedes: ${e.message}`);
             }
         }
 
