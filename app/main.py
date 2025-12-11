@@ -41,7 +41,7 @@ FORCE_CLOUDFLEET = os.getenv("FORCE_CLOUDFLEET", "false").lower() == "true"
 TARGET_PLACA = os.getenv("TARGET_PLACA", "FKL 92H")
 TARGET_CONDUCTOR_DOC = os.getenv("TARGET_CONDUCTOR_DOC", "1143865250")
 # Vehiculos a muestrear para armar rutas desde travels; subirlo si necesitas mas cobertura
-TRAVELS_SAMPLE_VEHICLES = int(os.getenv("TRAVELS_SAMPLE_VEHICLES", "50"))
+TRAVELS_SAMPLE_VEHICLES = int(os.getenv("TRAVELS_SAMPLE_VEHICLES", "5"))
 # Tiempo maximo (segundos) para intentar fallback de rutas desde travels
 TRAVELS_FALLBACK_MAX_SECONDS = float(os.getenv("TRAVELS_FALLBACK_MAX_SECONDS", "30"))
 # Paginas maximas a recorrer en travels cuando se usan filtros

@@ -8,16 +8,32 @@ import time
 from typing import Any
 from datetime import datetime, timedelta
 
+
 import requests
 from requests import HTTPError
+from functools import lru_cache, wraps
+
+def ttl_lru_cache(seconds: int, maxsize: int = 128):
+    def wrapper(func):
+        @lru_cache(maxsize=maxsize)
+        def inner(__ttl, *args, **kwargs):
+            # __ttl es solo para invalidar el cache cambiando el tiempo
+            return func(*args, **kwargs)
+        
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            return inner(time.time() // seconds, *args, **kwargs)
+        return wrapped
+    return wrapper
+
 
 
 BASE_URL = os.getenv("CLOUDFLEET_API_URL", "https://fleet.cloudfleet.com/api/v1").rstrip("/")
 TOKEN = os.getenv("CLOUDFLEET_API_TOKEN", "")
 TIMEOUT = 6
 PAGE_SIZE = 50  # CloudFleet API limit
-# 30 req/min -> ~2s; dejo 1.8 para acelerar un poco sin pasarse
-RATE_LIMIT_DELAY = float(os.getenv("CLOUDFLEET_RATE_LIMIT_DELAY", "1.8"))
+# 30 req/min -> ~2s; Bajamos a 0.2s para mayor velocidad, confiando en manejo de 429
+RATE_LIMIT_DELAY = float(os.getenv("CLOUDFLEET_RATE_LIMIT_DELAY", "0.2"))
 # 0 = sin limite, >0 limita paginas por seguridad
 MAX_PAGES = int(os.getenv("CLOUDFLEET_MAX_PAGES", "0"))
 # 0 = sin limite, >0 corta por ventana de tiempo
@@ -160,50 +176,57 @@ def get_clientes() -> list[dict[str, Any]]:
     Obtiene listado de clientes.
     Endpoint: /customers/
     """
-    return _get("customers/", default_on_404=[])
+    return _get_paginated("customers")
 
 
-def get_cliente(customer_id: str) -> dict[str, Any]:
+@ttl_lru_cache(seconds=300)
+def get_cliente(cliente_id: str) -> dict[str, Any]:
     """
     Obtiene un cliente especifico por ID.
     Endpoint: /customers/{customerId}
     """
-    return _get(f"customers/{customer_id}")
+    return _get(f"customers/{cliente_id}")
 
 
-def get_sedes(customer_id: str | None = None) -> list[dict[str, Any]]:
+@ttl_lru_cache(seconds=300)
+def get_sedes(cliente_id: str | None = None) -> list[dict[str, Any]]:
     """
     Obtiene listado de sedes/ubicaciones.
     Si se proporciona customer_id, filtra por cliente.
     Endpoint: /locations/ o /locations/?customerId={customerId}
     """
-    path = "locations/"
-    if customer_id:
-        path += f"?customerId={customer_id}"
-    return _get(path, default_on_404=[])
+    path = f"customers/{cliente_id}/locations" if cliente_id else "locations"
+    # Si no hay cliente_id, locations puede devolver 404 si no es superuser o similar,
+    # manejamos devolviendo vacio
+    try:
+        return _get_paginated(path)
+    except HTTPError as e:
+        if e.response.status_code == 404:
+            return []
+        raise e
 
 
-def get_sede(location_id: str) -> dict[str, Any]:
+@ttl_lru_cache(seconds=300)
+def get_sede(sede_id: str) -> dict[str, Any]:
     """
     Obtiene una sede especifica por ID.
     Endpoint: /locations/{locationId}
     """
-    return _get(f"locations/{location_id}")
+    return _get(f"locations/{sede_id}")
 
 
-def get_rutas(customer_id: str | None = None, max_pages: int | None = None) -> list[dict[str, Any]]:
+@ttl_lru_cache(seconds=300)
+def get_rutas() -> list[dict[str, Any]]:
     """
     Obtiene listado de rutas.
     Si se proporciona customer_id, filtra por cliente.
     Endpoint: /routes or /routes?customerId={customerId}
     """
-    path = "routes"
-    if customer_id:
-        path += f"?customerId={customer_id}"
-    return _get_paginated(path, max_pages=max_pages)
+    return _get_paginated("routes")
 
 
-def get_ruta(route_id: str) -> dict[str, Any]:
+@ttl_lru_cache(seconds=300)
+def get_ruta(ruta_id: str) -> dict[str, Any]:
     """
     Obtiene una ruta especifica por ID.
     Endpoint: /routes/{routeId}
