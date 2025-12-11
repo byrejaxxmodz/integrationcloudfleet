@@ -1408,9 +1408,10 @@ def listar_vehiculos(
                     centro_costo.lower() not in centro_costo_code.lower()):
                     continue
             
-            # FILTRO GLOBAL: Excluir Montacargas y Equipos Estacionarios
+            # FILTRO GLOBAL: Excluir Vehiculos no deseados
             tipo_veh = str(item.get("typeName") or "").lower()
-            if "montacarga" in tipo_veh or "estacionario" in tipo_veh:
+            excluir = ["montacarga", "estacionario", "moto", "camioneta", "remolque"]
+            if any(exc in tipo_veh for exc in excluir):
                 continue
 
             vehiculos.append(Vehiculo(
