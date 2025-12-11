@@ -9,10 +9,22 @@ QUOTA_MATRIX = {
     ("CCM LINDE", "IBAGUE"): [2, 2, 2, 2, 2, 2, 0],
     ("CCM LINDE", "MEDELLIN"): [7, 7, 7, 7, 7, 7, 1],
     ("CCM LINDE", "PEREIRA"): [4, 4, 4, 4, 4, 4, 0],
-    ("CCM LINDE", "POPAYAN"): [0, 0, 0, 0, 0, 0, 0], # Omitir, manual
-    ("CCM LINDE", "SOGAMOSO"): [0, 0, 0, 0, 0, 0, 0], # Omitir, manual
+    ("CCM LINDE", "POPAYAN"): [0, 0, 0, 0, 0, 0, 0],
+    ("CCM LINDE", "SOGAMOSO"): [0, 0, 0, 0, 0, 0, 0],
     ("CCM LINDE", "TOCANCIPA"): [5, 5, 5, 5, 5, 5, 0],
     ("CCM LINDE", "YUMBO"): [5, 5, 5, 5, 5, 5, 0],
+
+    # Alias CCM PRAXAIR -> CCM LINDE
+    ("CCM PRAXAIR", "BARRANQUILLA"): [2, 2, 2, 2, 2, 2, 0],
+    ("CCM PRAXAIR", "BOGOTA"): [7, 7, 7, 7, 7, 7, 3],
+    ("CCM PRAXAIR", "CARTAGENA"): [2, 2, 2, 2, 2, 2, 0],
+    ("CCM PRAXAIR", "IBAGUE"): [2, 2, 2, 2, 2, 2, 0],
+    ("CCM PRAXAIR", "MEDELLIN"): [7, 7, 7, 7, 7, 7, 1],
+    ("CCM PRAXAIR", "PEREIRA"): [4, 4, 4, 4, 4, 4, 0],
+    ("CCM PRAXAIR", "POPAYAN"): [0, 0, 0, 0, 0, 0, 0],
+    ("CCM PRAXAIR", "SOGAMOSO"): [0, 0, 0, 0, 0, 0, 0],
+    ("CCM PRAXAIR", "TOCANCIPA"): [5, 5, 5, 5, 5, 5, 0],
+    ("CCM PRAXAIR", "YUMBO"): [5, 5, 5, 5, 5, 5, 0],
     
     # CCM CHILCO - Asumimos 2 2 2 2 2 2 2 para Cazuca y Florencia
     ("CCM CHILCO", "CAZUCA"): [2, 2, 2, 2, 2, 2, 2],
