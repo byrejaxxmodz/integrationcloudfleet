@@ -5,8 +5,12 @@ Incluye manejo basico de 404 y 429 para no romper la UI.
 """
 import os
 import time
+import logging
 from typing import Any
 from datetime import datetime, timedelta
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 import requests
