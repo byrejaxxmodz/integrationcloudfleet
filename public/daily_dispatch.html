@@ -144,12 +144,14 @@
                             <div class="relative">
                                 <i
                                     class="fas fa-map-marker-alt absolute left-3 top-3.5 text-slate-500 group-focus-within:text-blue-400 transition-colors"></i>
-                                <input type="text" id="txtSede"
-                                    class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-slate-200 placeholder-slate-500"
-                                    placeholder="Ej: Yumbo, Bogota...">
+                                <select id="selSede" disabled
+                                    class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-slate-200 appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <option value="">Seleccione Cliente Primero...</option>
+                                </select>
+                                <i
+                                    class="fas fa-chevron-down absolute right-3 top-3.5 text-slate-500 pointer-events-none"></i>
                             </div>
-                            <p class="text-xs text-slate-500 mt-1 ml-1">Escribe para filtrar vehículos por ubicación.
-                            </p>
+                            <p class="text-xs text-slate-500 mt-1 ml-1">Filtra vehículos y personal por sede.</p>
                         </div>
 
                         <div class="group">
@@ -298,19 +300,55 @@
             try {
                 const res = await fetch(`${API_BASE}/clientes`);
                 const clientesData = await res.json();
-                const sel = document.getElementById('selCliente');
-                sel.innerHTML = '<option value="">-- Seleccionar Cliente --</option>';
+                const selCliente = document.getElementById('selCliente');
+                selCliente.innerHTML = '<option value="">Seleccione un cliente...</option>';
                 clientesData.forEach(c => {
                     const opt = document.createElement('option');
                     opt.value = c.id;
-                    opt.textContent = c.nombre || `Cliente ${c.id}`;
-                    sel.appendChild(opt);
+                    opt.textContent = c.nombre;
+                    selCliente.appendChild(opt);
                 });
+
+                // Listener para cargar sedes
+                selCliente.addEventListener('change', async (e) => {
+                    const clienteId = e.target.value;
+                    await cargarSedes(clienteId);
+                });
+
             } catch (e) {
-                console.error("Error loading clients", e);
-                const sel = document.getElementById('selCliente');
-                sel.innerHTML = '<option value="">Error cargando clientes</option>';
-                alert("Error cargando datos. Verifique consola y variables de entorno (CLOUDFLEET_API_URL/TOKEN).");
+                console.error(e);
+                alert("Error cargando clientes. Revisa la consola.");
+            }
+        }
+
+        async function cargarSedes(clienteId) {
+            const selSede = document.getElementById('selSede');
+            selSede.innerHTML = '<option value="">Cargando...</option>';
+            selSede.disabled = true;
+
+            if (!clienteId) {
+                selSede.innerHTML = '<option value="">Seleccione Cliente Primero...</option>';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/sedes?cliente_id=${clienteId}`);
+                const sedes = await res.json();
+
+                selSede.innerHTML = '<option value="">Todas las Sedes</option>';
+                sedes.forEach(s => {
+                    const opt = document.createElement('option');
+                    const nombre = s.nombre || s.ciudad || "Sede sin nombre";
+                    // Usamos ID si existe, o el nombre de la ciudad como fallback para filtros locales
+                    opt.value = s.id || s.ciudad;
+                    opt.textContent = nombre;
+                    opt.dataset.ciudad = s.ciudad || "";
+                    selSede.appendChild(opt);
+                });
+                selSede.disabled = false;
+            } catch (e) {
+                console.error("Error cargando sedes:", e);
+                selSede.innerHTML = '<option value="">Error cargando sedes</option>';
             }
         }
 
@@ -323,36 +361,32 @@
             if (!inputSede && !clienteId) {
                 alert("Por favor seleccione un cliente o escriba una ciudad/sede para filtrar.");
                 return;
-            }
+                const btn = document.querySelector('button[onclick="simularScheduler()"]');
+                const originalContent = btn.innerHTML;
+                btn.disabled = true;
+                const sedeSelect = document.getElementById('selSede');
+                const sedeVal = sedeSelect.value;
 
-            const btn = document.querySelector('button[onclick="simularScheduler()"]');
-            const originalContent = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="flex items-center gap-2"><i class="fas fa-circle-notch fa-spin"></i> Resolviendo Sede...</span>';
-
-            try {
+                // Resolver Ciudad/ID desde el select
                 let sedeIdResolvido = null;
-                let ciudadFiltro = inputSede;
+                let ciudadFiltro = "";
 
-                // 1. Smart Sede Resolution
-                if (inputSede) {
-                    try {
-                        const urlSedes = new URLSearchParams();
-                        if (clienteId) urlSedes.append('cliente_id', clienteId);
-                        const resSedes = await fetch(`${API_BASE}/sedes?${urlSedes}`);
-                        if (resSedes.ok) {
-                            const sedes = await resSedes.json();
-                            const match = sedes.find(s =>
-                                (s.name || "").toLowerCase().includes(inputSede.toLowerCase()) ||
-                                (s.city || "").toLowerCase() === inputSede.toLowerCase()
-                            );
-                            if (match) {
-                                console.log("Sede Resuelta:", match);
-                                sedeIdResolvido = match.id;
-                                ciudadFiltro = match.city || match.name;
-                            }
-                        }
-                    } catch (errSede) { console.warn("Resolution failed", errSede); }
+                if (sedeVal) {
+                    const selectedOpt = sedeSelect.options[sedeSelect.selectedIndex];
+                    // Si el value parece un ID (no coincide con el texto de ciudad o tiene formato :), lo tratamos como ID
+                    if (sedeVal.includes(":")) { // Formato ID virtual CITY:Bogota
+                        sedeIdResolvido = sedeVal;
+                        ciudadFiltro = selectedOpt.dataset.ciudad || selectedOpt.textContent;
+                    } else {
+                        // Asumimos que es ID directo si tiene longitud, o es nombre ciudad
+                        sedeIdResolvido = sedeVal;
+                        ciudadFiltro = selectedOpt.dataset.ciudad || selectedOpt.textContent;
+                    }
+                }
+
+                if (!clienteId) {
+                    alert("Por favor selecciona un cliente.");
+                    return;
                 }
 
                 btn.innerHTML = '<span class="flex items-center gap-2"><i class="fas fa-circle-notch fa-spin"></i> Simulando...</span>';

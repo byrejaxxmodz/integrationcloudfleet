@@ -32,8 +32,8 @@ BASE_URL = os.getenv("CLOUDFLEET_API_URL", "https://fleet.cloudfleet.com/api/v1"
 TOKEN = os.getenv("CLOUDFLEET_API_TOKEN", "")
 TIMEOUT = 6
 PAGE_SIZE = 50  # CloudFleet API limit
-# 30 req/min -> ~2s; Bajamos a 0.2s para mayor velocidad, confiando en manejo de 429
-RATE_LIMIT_DELAY = float(os.getenv("CLOUDFLEET_RATE_LIMIT_DELAY", "0.2"))
+# 30 req/min -> ~2s; 0.8s es un buen compromiso
+RATE_LIMIT_DELAY = float(os.getenv("CLOUDFLEET_RATE_LIMIT_DELAY", "0.8"))
 # 0 = sin limite, >0 limita paginas por seguridad
 MAX_PAGES = int(os.getenv("CLOUDFLEET_MAX_PAGES", "0"))
 # 0 = sin limite, >0 corta por ventana de tiempo
@@ -102,8 +102,10 @@ def _get_paginated(path: str, max_pages: int | None = None) -> list[dict[str, An
                 retries_429 += 1
                 if retries_429 > MAX_RETRIES_429:
                     raise
-                # Espera incremental para respetar rate limit estricto
-                time.sleep(RATE_LIMIT_DELAY * max(1, retries_429))
+                # Backoff exponencial suave para salir del penalty box (1s, 2s, 4s, 8s...)
+                wait_time = (1.5 ** retries_429) + 1
+                logger.warning(f"Rate limit 429 hit. Waiting {wait_time:.2f}s (Retry {retries_429}/{MAX_RETRIES_429})")
+                time.sleep(wait_time)
                 continue
             raise exc
 
