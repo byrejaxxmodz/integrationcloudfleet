@@ -950,8 +950,12 @@ def listar_sedes(cliente_id: Optional[str] = Query(None, description="ID del cli
         # 2. Si no hay sedes (y es lo comun en cuentas nuevas), extraer ciudades de los vehiculos
         # "La sede es la ciudad"
         if not sedes and get_camiones:
-            # OPTIMIZACION: Filtrar por cliente_id si existe
-            vehiculos = get_camiones(customer_id=cliente_id, max_pages=10) or []
+            try:
+                # OPTIMIZACION: Filtrar por cliente_id si existe
+                vehiculos = get_camiones(customer_id=cliente_id, max_pages=10) or []
+            except Exception:
+                # Fallback silencioso
+                vehiculos = []
             ciudades_vistas = set()
             idx = 1
             for v in vehiculos:

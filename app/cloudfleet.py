@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import requests
 from requests import HTTPError
 from functools import lru_cache, wraps
+from urllib.parse import quote
 
 def ttl_lru_cache(seconds: int, maxsize: int = 128):
     def wrapper(func):
@@ -202,15 +203,14 @@ def get_sedes(cliente_id: str | None = None) -> list[dict[str, Any]]:
     Si se proporciona customer_id, filtra por cliente.
     Endpoint: /locations/ o /locations/?customerId={customerId}
     """
-    path = f"locations?customerId={cliente_id}" if cliente_id else "locations"
+    path = f"locations?customerId={quote(str(cliente_id))}" if cliente_id else "locations"
     # Si no hay cliente_id, locations puede devolver 404 si no es superuser o similar,
     # manejamos devolviendo vacio
     try:
         return _get_paginated(path)
-    except HTTPError as e:
-        if e.response.status_code == 404:
-            return []
-        raise e
+    except Exception as e:
+        # Si falla (404, 400, etc), devolvemos lista vacia para no romper flujo
+        return []
 
 
 @ttl_lru_cache(seconds=300)
