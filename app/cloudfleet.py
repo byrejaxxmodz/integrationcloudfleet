@@ -202,7 +202,7 @@ def get_sedes(cliente_id: str | None = None) -> list[dict[str, Any]]:
     Si se proporciona customer_id, filtra por cliente.
     Endpoint: /locations/ o /locations/?customerId={customerId}
     """
-    path = f"customers/{cliente_id}/locations" if cliente_id else "locations"
+    path = f"locations?customerId={cliente_id}" if cliente_id else "locations"
     # Si no hay cliente_id, locations puede devolver 404 si no es superuser o similar,
     # manejamos devolviendo vacio
     try:
