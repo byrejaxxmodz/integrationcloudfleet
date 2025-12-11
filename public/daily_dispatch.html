@@ -353,28 +353,31 @@
         }
 
         async function simularScheduler() {
-            const inputSede = document.getElementById('txtSede').value.trim();
             const clienteId = document.getElementById('selCliente').value;
+            const sedeSelect = document.getElementById('selSede');
             const quota = parseInt(document.getElementById('selQuota').value);
             const hora = document.getElementById('selHora') ? document.getElementById('selHora').value : "06:00";
 
-            if (!inputSede && !clienteId) {
-                alert("Por favor seleccione un cliente o escriba una ciudad/sede para filtrar.");
+            if (!clienteId) {
+                alert("Por favor selecciona un cliente.");
                 return;
-                const btn = document.querySelector('button[onclick="simularScheduler()"]');
-                const originalContent = btn.innerHTML;
-                btn.disabled = true;
-                const sedeSelect = document.getElementById('selSede');
-                const sedeVal = sedeSelect.value;
+            }
 
-                // Resolver Ciudad/ID desde el select
+            const btn = document.querySelector('button[onclick="simularScheduler()"]');
+            const originalContent = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="flex items-center gap-2"><i class="fas fa-circle-notch fa-spin"></i> Simulando...</span>';
+
+            try {
+                // Resolver filtros
                 let sedeIdResolvido = null;
                 let ciudadFiltro = "";
+                const sedeVal = sedeSelect.value;
 
                 if (sedeVal) {
                     const selectedOpt = sedeSelect.options[sedeSelect.selectedIndex];
                     // Si el value parece un ID (no coincide con el texto de ciudad o tiene formato :), lo tratamos como ID
-                    if (sedeVal.includes(":")) { // Formato ID virtual CITY:Bogota
+                    if (sedeVal.includes(":")) {
                         sedeIdResolvido = sedeVal;
                         ciudadFiltro = selectedOpt.dataset.ciudad || selectedOpt.textContent;
                     } else {
@@ -384,20 +387,8 @@
                     }
                 }
 
-                if (!clienteId) {
-                    alert("Por favor selecciona un cliente.");
-                    return;
-                }
-
-                btn.innerHTML = '<span class="flex items-center gap-2"><i class="fas fa-circle-notch fa-spin"></i> Simulando...</span>';
-
                 // 2. Fetch Data
-                // Vehiculos: Filter by Sede ID if resolved, else Fuzzy City
                 const urlParamsVeh = new URLSearchParams();
-
-                // CRITICAL FIX: Do NOT filter by client_id if searching by City/Sede. 
-                // Many vehicles have missing customerId but valid Cost Centers, causing backend to hide them if client_id is sent.
-
                 if (ciudadFiltro) {
                     urlParamsVeh.append('ciudad', ciudadFiltro);
                 } else if (sedeIdResolvido) {
@@ -407,12 +398,10 @@
                     urlParamsVeh.append('cliente_id', clienteId);
                 }
 
-                // Personal: Filter by City
                 const urlParamsPer = new URLSearchParams();
                 if (clienteId) urlParamsPer.append('cliente_id', clienteId);
                 if (ciudadFiltro) urlParamsPer.append('ciudad', ciudadFiltro);
 
-                // Rutas: Filter by Client. Only filter by city if we are SURE (Sede Resolved)
                 const urlParamsRuta = new URLSearchParams();
                 if (clienteId) urlParamsRuta.append('cliente_id', clienteId);
                 if (sedeIdResolvido && ciudadFiltro) {
@@ -447,23 +436,6 @@
 
                 console.log("Resolved Sede:", sedeIdResolvido, "City:", ciudadFiltro);
                 console.log("Vehiculos:", vehiculos.length, "Rutas (Total available):", rutas.length);
-
-                // DEBUG: Check for PRU-PRU matches
-                const pruCheck = rutas.find(r => (r.codigo || "").includes("PRU"));
-                if (pruCheck) {
-                    console.log("DEBUG: PRU-PRU found in response:", pruCheck);
-                    // Check if it matches city
-                    const cityMatch = matchesCity({ ubicacion_ciudad: pruCheck.origen }, ciudadFiltro);
-                    if (!cityMatch) {
-                        console.warn("DEBUG: PRU-PRU found but CITY MISMATCH. Route City:", pruCheck.origen, "Filter:", ciudadFiltro);
-                        alert(`DEBUG: Ruta PRU-PRU encontrada pero la ciudad no coincide.\nRuta: ${pruCheck.origen}\nFiltro: ${ciudadFiltro}`);
-                    } else {
-                        console.log("DEBUG: PRU-PRU Matches City!");
-                    }
-                } else {
-                    console.warn("DEBUG: PRU-PRU NOT FOUND in Routes Response.");
-                    // alert("DEBUG: PRU-PRU no aparece en la respuesta de la API."); 
-                }
 
                 renderSimulation(quota, vehiculos, conductores, auxiliares, rutas, hora);
 
