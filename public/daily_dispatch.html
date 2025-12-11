@@ -391,9 +391,17 @@
                     fetch(`${API_BASE}/rutas_v2?${urlParamsRuta}`)
                 ]);
 
-                const vehiculos = await resVeh.json();
-                const personal = await resPer.json();
-                const rutas = await resRutas.json();
+                let vehiculos = await resVeh.json();
+                let personal = await resPer.json();
+                let rutas = await resRutas.json();
+
+                // Safety checks
+                if (!Array.isArray(personal)) {
+                    console.error("Personal API error:", personal);
+                    throw new Error("API Personal devolvió error o formato inválido: " + JSON.stringify(personal));
+                }
+                if (!Array.isArray(vehiculos)) vehiculos = [];
+                if (!Array.isArray(rutas)) rutas = [];
 
                 // Filtrar personal y conductores
                 const personalFiltrado = personal

@@ -113,10 +113,15 @@ def _get_paginated(path: str, max_pages: int | None = None) -> list[dict[str, An
         if isinstance(data, dict):
             items = data.get("items") or data.get("data") or data.get("results")
             if items is None:
-                return data  # devolver tal cual si no hay items
-            if not isinstance(items, list):
-                return data
-            data = items
+                # Si parece un solo objeto con ID, lo devolvemos como lista de 1
+                if "id" in data:
+                    data = [data]
+                else:
+                    return [] # Si no hay items y no parece objeto, devolvemos lista vacia
+            elif not isinstance(items, list):
+               return []
+            else:
+                data = items
 
         if not data:
             break
