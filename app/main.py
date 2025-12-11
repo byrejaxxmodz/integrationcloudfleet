@@ -14,6 +14,10 @@ from sqlalchemy.orm import Session
 from app.database import engine, get_db, Base
 from app.models import Viaje, ViajeDetalle
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 try:
     from app.cloudfleet import (
