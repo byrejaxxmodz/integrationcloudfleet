@@ -962,7 +962,7 @@ def listar_sedes(cliente_id: Optional[str] = Query(None, description="ID del cli
                 # Filtrar por cliente si se solicitó
                 if cliente_id:
                     v_customer_id = str(v.get("customerId", v.get("cliente_id", "")))
-                    cost_center = v.get("costCenter", {})
+                    cost_center = v.get("costCenter") or {}
                     cc_id = str(cost_center.get("id") or "").strip()
                     cc_name = str(cost_center.get("name") or "").lower()
                     
@@ -978,7 +978,7 @@ def listar_sedes(cliente_id: Optional[str] = Query(None, description="ID del cli
                         continue
 
                 # Extraer ciudad: puede ser objeto o string
-                city_obj = v.get("city")
+                city_obj = v.get("city") or {}
                 nombre_ciudad = ""
                 if isinstance(city_obj, dict):
                     nombre_ciudad = city_obj.get("name")
