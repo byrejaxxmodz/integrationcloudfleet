@@ -205,7 +205,7 @@
                     </button>
 
                     <div class="text-center">
-                        <span
+                        <span id="statusBadge"
                             class="text-xs text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">
                             <i class="fas fa-shield-alt mr-1"></i> Modo Seguro: Solo Lectura (GET)
                         </span>
@@ -318,6 +318,50 @@
             } catch (e) {
                 console.error(e);
                 alert("Error cargando clientes. Revisa la consola.");
+            }
+
+            // Listeners for Quota
+            document.getElementById('selCliente').addEventListener('change', updateQuota);
+            document.getElementById('selSede').addEventListener('change', updateQuota);
+            document.getElementById('selFecha').addEventListener('change', updateQuota);
+        }
+
+        // ---- AUTO QUOTA LOGIC ----
+        async function updateQuota() {
+            const clienteSelect = document.getElementById('selCliente');
+            const clienteName = clienteSelect.options[clienteSelect.selectedIndex]?.text || "";
+
+            const sedeSelect = document.getElementById('selSede');
+            const sedeName = sedeSelect.options[sedeSelect.selectedIndex]?.text || "";
+
+            const fechaVal = document.getElementById('selFecha').value;
+            const quotaInput = document.getElementById('selQuota');
+
+            if (clienteName && sedeName && fechaVal) {
+                // If sede is "Todas las Sedes" (value=""), do nothing
+                if (!sedeSelect.value) return;
+
+                try {
+                    const params = new URLSearchParams({
+                        cliente: clienteName,
+                        sede: sedeName,
+                        fecha: fechaVal
+                    });
+                    const res = await fetch(`${API_BASE}/api/quota?${params}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.quota > 0) {
+                            quotaInput.value = data.quota;
+                            // Visual feedback
+                            quotaInput.classList.add("bg-indigo-900", "text-indigo-100", "border-indigo-500");
+                            setTimeout(() => {
+                                quotaInput.classList.remove("bg-indigo-900", "text-indigo-100", "border-indigo-500");
+                            }, 800);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error fetching quota:", e);
+                }
             }
         }
 
@@ -550,16 +594,40 @@
                 const vehIcon = veh ? `<i class="fas fa-truck text-blue-400 mr-2"></i>` : `<i class="fas fa-times text-rose-500 mr-2"></i>`;
                 const condIcon = cond ? `<i class="fas fa-user text-purple-400 mr-2"></i>` : `<i class="fas fa-user-slash text-rose-500 mr-2"></i>`;
 
+                // Build DataList options for Vias
+                let dataListOptions = '';
+                if (ruta) {
+                    // Collect all valid Vias from the route object
+                    const viasList = [];
+                    if (ruta.vias_detalle && ruta.vias_detalle.length > 0) {
+                        ruta.vias_detalle.forEach(vd => viasList.push(vd.code || vd.name));
+                    } else if (ruta.vias && ruta.vias.length > 0) {
+                        ruta.vias.forEach(v => viasList.push(v));
+                    }
+                    dataListOptions = viasList.map(v => `<option value="${v}">`).join('');
+                }
+
+                // If viaLabel is "SIN VIA", leave input empty so placeholder shows
+                const inputValue = (viaLabel !== 'SIN VIA') ? viaLabel : '';
+
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-white/5 transition-colors group";
                 tr.innerHTML = `
                     <td class="p-4">
-                        <div class="flex flex-col">
-                            <span class="inline-flex items-center justify-center bg-indigo-500/20 text-indigo-100 px-3 py-1 rounded font-semibold text-xs border border-indigo-500/40">
-                                ${viaLabel}
-                            </span>
-                            <span class="text-[11px] text-slate-500 mt-2">${rutaInfo}</span>
-                            <span class="text-[10px] text-slate-600 mt-1"><i class="far fa-clock"></i> ${hora}</span>
+                        <div class="flex flex-col gap-2">
+                             <!-- MANUAL VIA INPUT -->
+                            <div class="relative">
+                                <input list="vias-options-${i}" 
+                                       type="text" 
+                                       class="bg-indigo-500/20 text-indigo-100 px-3 py-1.5 rounded font-semibold text-xs border border-indigo-500/40 w-full focus:outline-none focus:border-indigo-400 placeholder-indigo-300/50"
+                                       placeholder="Escriba Vía..."
+                                       value="${inputValue}">
+                                <datalist id="vias-options-${i}">
+                                    ${dataListOptions}
+                                </datalist>
+                            </div>
+                            <span class="text-[11px] text-slate-500">${rutaInfo}</span>
+                            <span class="text-[10px] text-slate-600"><i class="far fa-clock"></i> ${hora}</span>
                         </div>
                     </td>
                     <td class="p-4">

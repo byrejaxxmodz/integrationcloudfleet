@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.database import engine, get_db, Base
 from app.models import Viaje, ViajeDetalle
+from app.quota_rules import get_quota_for_date
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -1653,6 +1654,22 @@ def dashboard():
     import pathlib
     html_path = pathlib.Path(__file__).parent.parent / "public" / "index.html"
     return FileResponse(html_path)
+
+
+# ============= ENDPOINT DE CUPO SUGERIDO =============
+
+@app.get("/api/quota")
+def obtener_cupo(cliente: str, sede: str, fecha: str):
+    """
+    Retorna el cupo sugerido basado en reglas de negocio (Excel).
+    Ej: /api/quota?cliente=CCM%20LINDE&sede=BOGOTA&fecha=2025-12-11
+    """
+    try:
+        quota = get_quota_for_date(cliente, sede, fecha)
+        return {"quota": quota}
+    except Exception as e:
+        logger.error(f"Error calculando cupo: {e}")
+        return {"quota": 0}
 
 
 
