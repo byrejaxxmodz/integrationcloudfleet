@@ -464,7 +464,7 @@
                 }
 
                 // Call Backend Auto-Schedule (Preview Mode)
-                const res = await fetch(`${API_BASE}/auto-schedule?persist=false`, {
+                const res = await fetch(`${API_BASE}/api/auto-schedule?persist=false`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
