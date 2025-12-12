@@ -80,9 +80,11 @@ def get_expected_sedes(cliente_nombre: str) -> list[str]:
     c_key = cliente_nombre.upper().strip()
     sedes = set()
     
-    # Busqueda exacta y parcial
+    # Busqueda bidireccional:
+    # 1. Si el nombre del API contiene la clave (ej: "CCM LINDE SAS" contiene "CCM LINDE")
+    # 2. Si la clave contiene el nombre del API (ej: "CCM LINE" vs "LINDE" - mas riesgoso pero util para "CHILCO")
     for (k_cli, k_sede) in QUOTA_MATRIX.keys():
-        if k_cli in c_key:
+        if k_cli in c_key or c_key in k_cli:
             sedes.add(k_sede)
             
     return sorted(list(sedes))
