@@ -1579,6 +1579,17 @@ def listar_personal(
             # Filtrar por rol si se especifica
             if rol and rol.lower() not in rol_persona.lower():
                 continue
+
+            # Heuristic to exclude Companies (not people)
+            name_upper = nombre_completo.upper()
+            if (name_upper.startswith("(") or 
+                " S.A" in name_upper or 
+                " LTDA" in name_upper or 
+                " SAS" in name_upper or 
+                " EMPRESA" in name_upper or 
+                " COMPAÃ‘" in name_upper or 
+                " COMPAÑ" in name_upper):
+                continue
             
             personal.append(Persona(
                 id=str(item.get("id", item.get("personalId", ""))),
