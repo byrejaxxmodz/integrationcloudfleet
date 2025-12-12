@@ -205,7 +205,7 @@
                     </button>
 
                     <div class="text-center">
-                        <span id="statusBadge"
+                        <span id="safeModeBadge"
                             class="text-xs text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">
                             <i class="fas fa-shield-alt mr-1"></i> Modo Seguro: Solo Lectura (GET)
                         </span>
@@ -220,9 +220,25 @@
                         <h2 class="font-semibold text-white flex items-center gap-2">
                             <i class="fas fa-list-alt text-blue-400"></i> Resultados de Simulación
                         </h2>
-                        <span id="statusBadge"
-                            class="text-xs font-mono text-slate-400 bg-slate-800 px-2 py-1 rounded border border-slate-700">ESPERANDO
-                            DATOS</span>
+                        <div class="flex items-center gap-2">
+                            <span id="statusBadge"
+                                class="text-xs font-mono text-slate-400 bg-slate-800 px-2 py-1 rounded border border-slate-700">ESPERANDO
+                                DATOS</span>
+
+                            <!-- Draft Buttons -->
+                            <button id="btnSaveDraft" onclick="saveDraft()"
+                                class="hidden bg-slate-700 hover:bg-slate-600 text-xs text-white px-3 py-1 rounded border border-slate-600 transition-colors"
+                                title="Guardar Borrador">
+                                <i class="fas fa-save mr-1"></i> Guardar
+                            </button>
+                            <button id="btnExecuteDraft" onclick="executeDispatch()"
+                                class="hidden bg-blue-600 hover:bg-blue-500 text-xs text-white px-3 py-1 rounded border border-blue-500 transition-colors shadow-lg shadow-blue-500/20"
+                                title="Confirmar y Enviar">
+                                <i class="fas fa-paper-plane mr-1"></i> Ejecutar
+                            </button>
+                            <div id="draftStatus" class="hidden text-xs text-yellow-400"><i class="fas fa-check"></i>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="emptyState"
