@@ -1398,6 +1398,12 @@ def listar_vehiculos(
         # Intentar filtrar por cliente desde la API si es posible, y limitar paginas para evitar HANG
         vehiculos_data = get_camiones(customer_id=cliente_id, max_pages=10)
         
+        
+        # Pre-calc client cities if needed
+        ciudades_cliente = []
+        if cliente_id:
+             ciudades_cliente = [s.lower() for s in get_expected_sedes(cliente_id)]
+
         vehiculos: list[Vehiculo] = []
         for item in vehiculos_data:
             # Obtener ciudad (puede ser objeto o string)
