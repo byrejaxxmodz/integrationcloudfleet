@@ -35,6 +35,16 @@ QUOTA_MATRIX = {
     ("CCM CHILCO", "MARINILLA"): [2, 2, 2, 2, 2, 2, 2],
     ("CCM CHILCO", "NEIVA"): [3, 3, 3, 3, 3, 3, 3],
     ("CCM CHILCO", "YUMBO"): [1, 1, 1, 1, 1, 1, 1],
+
+    # Alias CHILCO (nombre corto) -> CCM CHILCO
+    ("CHILCO", "CAZUCA"): [2, 2, 2, 2, 2, 2, 2],
+    ("CHILCO", "FLORENCIA"): [2, 2, 2, 2, 2, 2, 2],
+    ("CHILCO", "GIRARDOT"): [1, 1, 1, 1, 1, 1, 1],
+    ("CHILCO", "HISPANIA"): [1, 1, 1, 1, 1, 1, 1],
+    ("CHILCO", "MADRID"): [1, 1, 1, 1, 1, 1, 1],
+    ("CHILCO", "MARINILLA"): [2, 2, 2, 2, 2, 2, 2],
+    ("CHILCO", "NEIVA"): [3, 3, 3, 3, 3, 3, 3],
+    ("CHILCO", "YUMBO"): [1, 1, 1, 1, 1, 1, 1],
 }
 
 def get_quota_for_date(cliente_nombre: str, sede_nombre: str, fecha_str: str) -> int:
@@ -80,11 +90,11 @@ def get_expected_sedes(cliente_nombre: str) -> list[str]:
     c_key = cliente_nombre.upper().strip()
     sedes = set()
     
-    # Busqueda bidireccional:
-    # 1. Si el nombre del API contiene la clave (ej: "CCM LINDE SAS" contiene "CCM LINDE")
-    # 2. Si la clave contiene el nombre del API (ej: "CCM LINE" vs "LINDE" - mas riesgoso pero util para "CHILCO")
+    # Busqueda Unidireccional:
+    # Solo si el nombre del API contiene la clave (ej: "CCM LINDE SAS" contiene "CCM LINDE")
+    # Para casos cortos como "CHILCO", usamos el alias explicito en la matriz.
     for (k_cli, k_sede) in QUOTA_MATRIX.keys():
-        if k_cli in c_key or c_key in k_cli:
+        if k_cli in c_key:
             sedes.add(k_sede)
             
     return sorted(list(sedes))
