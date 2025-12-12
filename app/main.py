@@ -1805,10 +1805,47 @@ def auto_schedule_trips(req: AutoScheduleRequest, db: Session = Depends(get_db))
                 notas="Generado automaticamente"
             )
             db.add(detalle)
+            
+            # Guardamos objeto Viaje (no solo ID) para extraer datos despues? 
+            # No, Viaje es SQAlchemy object. created_ids guardara solo ID o objeto?
+            # Append ID
             created_ids.append(nuevo_viaje.id)
             
         db.commit()
-        return {"message": f"{len(created_ids)} viajes generados", "ids": created_ids}
+        
+        # Calcular recursos no usados (Stand-by)
+        unused_vehicles = [v for i, v in enumerate(vehiculos) if i >= req.quota]
+        unused_conductores = [c for i, c in enumerate(conductores) if i >= req.quota]
+        unused_auxiliares = [a for i, a in enumerate(auxiliares) if i >= req.quota]
+
+        # Construir respuesta detallada para el Frontend
+        detailed_trips = []
+        for i in range(len(created_ids)):
+             # Recuperar objetos originales basados en el indice (sabemos que sigo el orden 0..quota)
+             v = vehiculos[i]
+             c = conductores[i]
+             a = auxiliares[i]
+             # Mock ruta Round Robin para efectos visuales (el endpoint devuelve asignaciones "reales" pero sin ruta aun?)
+             rutas_disponibles = get_rutas(req.cliente_id) if get_rutas else []
+             r = rutas_disponibles[i % len(rutas_disponibles)] if rutas_disponibles else {}
+             
+             detailed_trips.append({
+                 "vehiculo": v,
+                 "conductor": c,
+                 "auxiliar": a,
+                 "ruta": r
+             })
+
+        return {
+            "created_trips": created_ids, 
+            "detailed_trips": detailed_trips,
+            "message": f"Se programaron {len(created_ids)} viajes.",
+            "standby": {
+                "vehicles": unused_vehicles,
+                "drivers": unused_conductores,
+                "assistants": unused_auxiliares
+            }
+        }
 
     except Exception as e:
         db.rollback()
