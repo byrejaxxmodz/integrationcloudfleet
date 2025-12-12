@@ -1004,6 +1004,45 @@ def listar_sedes(cliente_id: Optional[str] = Query(None, description="ID del cli
                         ))
                         idx += 1
 
+        # 3. ENFORCER: Garantizar sedes esperadas del Excel (Quota Rules)
+        if cliente_id:
+            try:
+                # Obtener nombre de cliente para buscar en matriz
+                c_name = ""
+                # Opcion A: Si ya teniamos sedes reales
+                if sedes_data and isinstance(sedes_data, list) and len(sedes_data) > 0:
+                    c_name = sedes_data[0].get("customer", {}).get("name") or ""
+                
+                # Opcion B: Si no, intentar consulta rapida
+                if not c_name and get_cliente:
+                     try:
+                        cd = get_cliente(cliente_id)
+                        c_name = cd.get("name")
+                     except:
+                        pass
+                
+                expected = get_expected_sedes(c_name)
+                
+                if expected:
+                    existing_cities = set()
+                    for s in sedes:
+                       if s.ciudad: existing_cities.add(s.ciudad.upper().strip())
+                       if s.nombre: existing_cities.add(s.nombre.upper().strip())
+                    
+                    for city_name in expected:
+                        if city_name.upper().strip() not in existing_cities:
+                            sedes.append(Sede(
+                                id=f"FORCE:{city_name}",
+                                cliente_id=str(cliente_id),
+                                nombre=city_name,
+                                ciudad=city_name,
+                                direccion="Sede Esperada (Excel)",
+                                telefono="",
+                                datos_adicionales={"forced": True}
+                            ))
+            except Exception as e:
+                logger.warning(f"Error enforcing expected sedes: {e}")
+
         return sedes
     except Exception as e:
         logger.error(f"Error listar sedes: {e}")
