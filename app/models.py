@@ -39,3 +39,19 @@ class ViajeDetalle(Base):
 
     # Relationships
     viaje = relationship("Viaje", back_populates="detalle")
+
+
+class DispatchDraft(Base):
+    __tablename__ = "dispatch_drafts"
+
+    id = Column(String(50), primary_key=True) # UUID
+    cliente_id = Column(String(50), nullable=False)
+    sede_id = Column(String(50), nullable=False)
+    fecha = Column(Date, nullable=False)
+    
+    # JSON payload stringified
+    payload = Column(Text, nullable=False)
+    
+    status = Column(String(20), default="DRAFT") # DRAFT, EXECUTED
+    created_at = Column(TIMESTAMP, default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
