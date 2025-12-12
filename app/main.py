@@ -1425,17 +1425,44 @@ def listar_vehiculos(
                     if customer_val:
                         match_cliente = customer_val == str(cliente_id)
                 # Fallback: usar centro de costo como proxy de cliente
+                # STRICT MATCHING: Evitar confusiones entre LINDE/PRAXAIR y CHILCO
                 if not match_cliente and cost_center:
                     centro_id = str(cost_center.get("id") or cost_center.get("code") or "").strip()
                     centro_nombre = (cost_center.get("name") or "").lower()
                     cid = str(cliente_id).lower()
-                    if centro_id and cid in centro_id.lower():
-                        match_cliente = True
-                    elif centro_nombre and cid in centro_nombre:
-                        match_cliente = True
-                # Si no hay forma de saber, no descartamos
+                    
+                    # Logica de exclusion mutua explicita
+                    is_linde_req = "linde" in cid or "praxair" in cid
+                    is_chilco_req = "chilco" in cid
+                    
+                    cc_is_linde = "linde" in centro_nombre or "praxair" in centro_nombre
+                    cc_is_chilco = "chilco" in centro_nombre
+                    
+                    if is_linde_req and cc_is_chilco:
+                        match_cliente = False # Explicit Fail
+                    elif is_chilco_req and cc_is_linde:
+                        match_cliente = False # Explicit Fail
+                    else:
+                        # Match positivo si coinciden substrings significativos
+                        if centro_id and cid in centro_id.lower():
+                             match_cliente = True
+                        elif centro_nombre and cid in centro_nombre:
+                             match_cliente = True
+                        # Match si el CC contiene el nombre del cliente (ej: "CCM LINDE" contains "LINDE")
+                        elif is_linde_req and cc_is_linde:
+                             match_cliente = True
+                        elif is_chilco_req and cc_is_chilco:
+                             match_cliente = True
+
+                # Si no hay forma de saber, no descartamos (salvo que sea un cliente explicito)
                 if not match_cliente and not (ciudades_cliente or item.get("customerId") or cost_center):
-                    match_cliente = True
+                     # Si estamos filtrando por un cliente especifico y el vehiculo es huerfano,
+                     # mejor NO mostrarlo para evitar ruido (User Request: "No pertenecen al CC correcto")
+                     if cliente_id:
+                        match_cliente = False
+                     else:
+                        match_cliente = True
+
                 if not match_cliente:
                     continue
             
@@ -1448,8 +1475,17 @@ def listar_vehiculos(
                     continue
             
             # FILTRO GLOBAL: Excluir Vehiculos no deseados
-            tipo_veh = str(item.get("typeName") or "").lower()
-            excluir = ["montacarga", "estacionario", "moto", "camioneta", "remolque"]
+            # Normalizar para detectar "Remolque" vs "REMOLQUE" vs "Semirremolque"
+            import unicodedata
+            def norm_v(s): return ''.join(c for c in unicodedata.normalize('NFD', str(s)) if unicodedata.category(c) != 'Mn').lower()
+            
+            tipo_veh = norm_v(item.get("typeName") or "")
+            # Lista ampliada de exclusiones
+            excluir = [
+                "montacarga", "estacionario", "moto", "camioneta", 
+                "remolque", "semirremolque", "semi-remolque", "trailer", 
+                "caja", "plancha", "dolly", "furgon"
+            ]
             if any(exc in tipo_veh for exc in excluir):
                 continue
 
