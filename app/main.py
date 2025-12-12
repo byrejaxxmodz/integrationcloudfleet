@@ -1399,16 +1399,25 @@ def listar_vehiculos(
         vehiculos_data = get_camiones(customer_id=cliente_id, max_pages=10)
         
         
+        # Helper de normalizacion (acentos)
+        import unicodedata
+        def normalize_str(s):
+            if not s: return ""
+            return ''.join(c for c in unicodedata.normalize('NFD', str(s)) if unicodedata.category(c) != 'Mn').lower()
+            
         # Pre-calc client cities if needed
         ciudades_cliente = []
         if cliente_id:
-             ciudades_cliente = [s.lower() for s in get_expected_sedes(cliente_id)]
+             ciudades_cliente = [normalize_str(s) for s in get_expected_sedes(cliente_id)]
 
         vehiculos: list[Vehiculo] = []
+        ciudad_norm = normalize_str(ciudad) if ciudad else ""
+        
         for item in vehiculos_data:
             # Obtener ciudad (puede ser objeto o string)
             city_obj = item.get("city")
             ubicacion = city_obj.get("name", "") if isinstance(city_obj, dict) else (city_obj or "")
+            ubicacion_norm = normalize_str(ubicacion)
 
             # Obtener centro de costo
             cost_center = item.get("costCenter")
@@ -1417,7 +1426,7 @@ def listar_vehiculos(
             
             # Filtrar por ciudad si se especifica
             if ciudad:
-                if not ubicacion or ciudad.lower() not in ubicacion.lower():
+                if not ubicacion or ciudad_norm not in ubicacion_norm:
                     continue
 
             # Filtrar por cliente usando las ciudades de sus sedes
