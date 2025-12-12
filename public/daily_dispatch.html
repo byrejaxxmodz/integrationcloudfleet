@@ -252,6 +252,26 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <!-- Stand-by Resources Section -->
+                    <div id="standbyContainer" class="mt-8 border-t border-slate-700 pt-6 hidden">
+                        <h3
+                            class="text-slate-400 uppercase text-xs font-bold tracking-wider mb-4 border-l-4 border-slate-600 pl-3">
+                            Recursos Disponibles (Stand-by)
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <h4 class="text-slate-500 text-xs mb-2">Vehículos Disponibles</h4>
+                                <div id="stbyVehicles"
+                                    class="grid grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto"></div>
+                            </div>
+                            <div>
+                                <h4 class="text-slate-500 text-xs mb-2">Conductores Disponibles</h4>
+                                <div id="stbyDrivers" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto"></div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </section>
         </main>
@@ -497,6 +517,40 @@
                 renderSimulation(quota, vehiculos, conductores, auxiliares, rutas, hora);
 
                 document.getElementById('statusBadge').className = 'text-xs font-mono text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded border border-emerald-400/20';
+                if (data.standby) {
+                    renderStandby(data.standby);
+                }
+
+                // Adapter: Convert 'created_trips' (Viaje objects) back to arrays for renderSimulation
+                const trips = data.created_trips || [];
+                const vArr = trips.map(t => ({ placa: t.vehiculo_id, tipo: 'Asignado', id: t.vehiculo_id })); // ID is proxy for name if not populated
+                // Problem: created_trips usually return ID only unless using response_model with relationships.
+                // If main.py returned Viaje objects, they just have IDs. 
+                // The user sees IDs? Not good. 
+                // Backend should return populated objects or I should extract them from my previous `listar_...` calls?
+                // `auto_schedule` does the listing internally. The frontend doesn't have the dictionary.
+
+                // HOTFIX: Update main.py to return POPULATED trip info or pass the resource details in the response.
+                // Let's assume for now I will fix main.py to return detailed objects.
+
+                // Assuming data.detailed_assignments exists (I will add this to backend)
+                // OR construct from `created_trips` if they have names.
+                // Let's pass the raw `created_trips` to renderSimulation instead and refactor it?
+                // Too risky. 
+
+                // Better: Update backend `auto_schedule` to return the `asignaciones` structure again matching the arrays?
+                // The `auto_schedule` returns `{created_trips: ..., standby: ...}`
+
+                // Let's depend on the backend sending `detailed_trips` which contains names.
+                const assigns = data.detailed_trips || [];
+                const vList = assigns.map(a => a.vehiculo);
+                const cList = assigns.map(a => a.conductor);
+                const aList = assigns.map(a => a.auxiliar);
+                const rList = assigns.map(a => a.ruta); // Assuming we pass route info
+
+                renderSimulation(assigns.length, vList, cList, aList, rList, hora);
+
+                document.getElementById('statusBadge').className = 'bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold border border-emerald-500/20';
                 document.getElementById('statusBadge').innerHTML = '<i class="fas fa-check mr-1"></i> SIMULACIÓN OK';
 
             } catch (e) {
@@ -615,38 +669,69 @@
                 tr.innerHTML = `
                     <td class="p-4">
                         <div class="flex flex-col gap-2">
-                             <!-- MANUAL VIA INPUT -->
-                            <div class="relative">
-                                <input list="vias-options-${i}" 
-                                       type="text" 
-                                       class="bg-indigo-500/20 text-indigo-100 px-3 py-1.5 rounded font-semibold text-xs border border-indigo-500/40 w-full focus:outline-none focus:border-indigo-400 placeholder-indigo-300/50"
-                                       placeholder="Escriba Vía..."
-                                       value="${inputValue}">
-                                <datalist id="vias-options-${i}">
-                                    ${dataListOptions}
-                                </datalist>
+                    <td class="p-4 align-top">
+                        ${viaInput}
+                    </td>
+                    <td class="p-4 align-top">
+                         <div class="flex items-start">
+                            <div class="mt-1">${vehIcon}</div>
+                            <div>
+                                <input type="text" class="bg-transparent border-b border-slate-600 text-slate-200 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${veh ? veh.placa : ''}" placeholder="Placa...">
+                                <div class="text-xs text-slate-500">${veh ? (veh.tipo || 'Vehï¿½culo') : 'No asignado'}</div>
                             </div>
-                            <span class="text-[11px] text-slate-500">${rutaInfo}</span>
-                            <span class="text-[10px] text-slate-600"><i class="far fa-clock"></i> ${hora}</span>
                         </div>
                     </td>
-                    <td class="p-4">
-                        <div class="${vehClass} flex items-center">${vehIcon} ${veh ? veh.placa + ' <span class="text-xs text-slate-500 ml-1">(' + (veh.tipo || 'N/A') + ')</span>' : 'No disponible'}</div>
+                    <td class="p-4 align-top">
+                         <div class="flex items-start">
+                            <div class="mt-1">${condIcon}</div>
+                            <div>
+                                <input type="text" class="bg-transparent border-b border-slate-600 text-slate-200 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${cond ? cond.nombre : ''}" placeholder="Conductor...">
+                                <div class="text-xs text-slate-500">${cond ? (cond.documento || '') : 'No asignado'}</div>
+                            </div>
+                         </div>
                     </td>
-                    <td class="p-4">
-                        <div class="${condClass} flex items-center">${condIcon} ${cond ? cond.nombre : 'No disponible'}</div>
+                     <td class="p-4 align-top">
+                         <div class="flex items-start">
+                            <div class="mr-2 mt-1 px-1 rounded bg-slate-800 text-xs text-slate-400">AUX</div>
+                            <div>
+                                <input type="text" class="bg-transparent border-b border-slate-600 text-slate-400 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${aux ? aux.nombre : ''}" placeholder="Auxiliar...">
+                            </div>
+                         </div>
                     </td>
-                    <td class="p-4">
-                        <div class="${auxClass}">${aux ? aux.nombre : '-'}</div>
-                    </td>
-                    <td class="p-4 text-right">
-                        <span class="text-xs font-medium text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-full border border-amber-400/20">
+                    <td class="p-4 align-top">
+                        <span class="inline-flex items-center px-2 py-1 rounded bg-yellow-500/10 text-yellow-500 text-xs font-medium border border-yellow-500/20">
                             BORRADOR
                         </span>
                     </td>
                 `;
                 tbody.appendChild(tr);
             }
+        }
+
+        function renderStandby(standby) {
+            const container = document.getElementById('standbyContainer');
+            if (!standby || (!standby.vehicles.length && !standby.drivers.length)) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+
+            // Render Unused Vehicles
+            const vList = document.getElementById('stbyVehicles');
+            vList.innerHTML = standby.vehicles.map(v =>
+                `<div class="p-2 bg-slate-800/50 rounded border border-slate-700 text-xs flex justify-between items-center">
+                    <span class="text-slate-300 font-bold"><i class="fas fa-truck text-slate-500 mr-1"></i> ${v.placa}</span>
+                    <span class="text-slate-500 scale-75">${v.tipo}</span>
+                 </div>`
+            ).join('');
+
+            // Render Unused Drivers
+            const cList = document.getElementById('stbyDrivers');
+            cList.innerHTML = standby.drivers.map(c =>
+                `<div class="p-2 bg-slate-800/50 rounded border border-slate-700 text-xs flex justify-between items-center">
+                    <span class="text-slate-300"><i class="fas fa-user text-slate-500 mr-1"></i> ${c.nombre}</span>
+                 </div>`
+            ).join('');
         }
 
         init();
