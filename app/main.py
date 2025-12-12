@@ -1766,7 +1766,7 @@ class AutoScheduleRequest(BaseModel):
     cliente_id: Optional[str] = None # Opcional, si se sabe
 
 @app.post("/api/auto-schedule")
-def auto_schedule_trips(req: AutoScheduleRequest, db: Session = Depends(get_db)):
+def auto_schedule_trips(req: AutoScheduleRequest, persist: bool = Query(True), db: Session = Depends(get_db)):
 
     try:
         # 1. Obtener recursos disponibles desde API CloudFleet (con filtros locales)
@@ -1786,32 +1786,33 @@ def auto_schedule_trips(req: AutoScheduleRequest, db: Session = Depends(get_db))
             c_id = conductores[i].id if i < len(conductores) else None
             a_id = auxiliares[i].id if i < len(auxiliares) else None
             
-            # Crear Viaje Cabecera
-            nuevo_viaje = Viaje(
-                cliente_id=req.cliente_id or "UNKNOWN", 
-                sede_id=req.sede_id,
-                fecha=fecha_obj,
-                estado="borrador"
-            )
-            db.add(nuevo_viaje)
-            db.flush() # Para obtener ID
+            if persist:
+                # Crear Viaje Cabecera
+                nuevo_viaje = Viaje(
+                    cliente_id=req.cliente_id or "UNKNOWN", 
+                    sede_id=req.sede_id,
+                    fecha=fecha_obj,
+                    estado="borrador"
+                )
+                db.add(nuevo_viaje)
+                db.flush() # Para obtener ID
+                
+                # Crear Detalle
+                detalle = ViajeDetalle(
+                    viaje_id=nuevo_viaje.id,
+                    vehiculo_id=v_id,
+                    conductor_id=c_id,
+                    auxiliar_id=a_id,
+                    notas="Generado automaticamente"
+                )
+                db.add(detalle)
+                created_ids.append(nuevo_viaje.id)
+            else:
+                # Mock ID for frontend references
+                created_ids.append(f"preview_{i}")
             
-            # Crear Detalle
-            detalle = ViajeDetalle(
-                viaje_id=nuevo_viaje.id,
-                vehiculo_id=v_id,
-                conductor_id=c_id,
-                auxiliar_id=a_id,
-                notas="Generado automaticamente"
-            )
-            db.add(detalle)
-            
-            # Guardamos objeto Viaje (no solo ID) para extraer datos despues? 
-            # No, Viaje es SQAlchemy object. created_ids guardara solo ID o objeto?
-            # Append ID
-            created_ids.append(nuevo_viaje.id)
-            
-        db.commit()
+        if persist:
+            db.commit()
         
         # Calcular recursos no usados (Stand-by)
         unused_vehicles = [v for i, v in enumerate(vehiculos) if i >= req.quota]
@@ -1820,12 +1821,11 @@ def auto_schedule_trips(req: AutoScheduleRequest, db: Session = Depends(get_db))
 
         # Construir respuesta detallada para el Frontend
         detailed_trips = []
-        for i in range(len(created_ids)):
+        for i in range(req.quota): # Based on quota, not just created_ids
              # Recuperar objetos originales basados en el indice (sabemos que sigo el orden 0..quota)
-             v = vehiculos[i]
-             c = conductores[i]
-             a = auxiliares[i]
-             # Mock ruta Round Robin para efectos visuales (el endpoint devuelve asignaciones "reales" pero sin ruta aun?)
+             v = vehiculos[i] if i < len(vehiculos) else None
+             c = conductores[i] if i < len(conductores) else None
+             a = auxiliares[i] if i < len(auxiliares) else None
              rutas_disponibles = get_rutas(req.cliente_id) if get_rutas else []
              r = rutas_disponibles[i % len(rutas_disponibles)] if rutas_disponibles else {}
              
@@ -1839,7 +1839,7 @@ def auto_schedule_trips(req: AutoScheduleRequest, db: Session = Depends(get_db))
         return {
             "created_trips": created_ids, 
             "detailed_trips": detailed_trips,
-            "message": f"Se programaron {len(created_ids)} viajes.",
+            "message": f"Se programaron {len(created_ids)} viajes (Persistido: {persist}).",
             "standby": {
                 "vehicles": unused_vehicles,
                 "drivers": unused_conductores,
@@ -1852,6 +1852,77 @@ def auto_schedule_trips(req: AutoScheduleRequest, db: Session = Depends(get_db))
         tb = traceback.format_exc()
         logger.error(f"Error scheduler: {tb}")
         raise HTTPException(status_code=500, detail=tb)
+
+
+# ============= PRE-PROGRAMMING (DRAFTS) =============
+
+class DraftRequest(BaseModel):
+    cliente_id: str
+    sede_id: str
+    fecha: str
+    payload: Dict[str, Any] # Full JSON state of simulation
+    status: str = "DRAFT"
+
+@app.post("/api/draft")
+def save_draft(req: DraftRequest, db: Session = Depends(get_db)):
+    import uuid
+    import json
+    try:
+        fecha_obj = datetime.strptime(req.fecha, "%Y-%m-%d").date()
+        
+        # Check existing
+        existing = db.query(DispatchDraft).filter(
+            DispatchDraft.cliente_id == req.cliente_id,
+            DispatchDraft.sede_id == req.sede_id,
+            DispatchDraft.fecha == fecha_obj,
+            DispatchDraft.status == "DRAFT"
+        ).first()
+
+        if existing:
+            existing.payload = json.dumps(req.payload)
+            existing.updated_at = datetime.utcnow()
+            db.commit()
+            return {"message": "Borrador actualizado", "id": existing.id}
+        
+        new_draft = DispatchDraft(
+            id=str(uuid.uuid4()),
+            cliente_id=req.cliente_id,
+            sede_id=req.sede_id,
+            fecha=fecha_obj,
+            payload=json.dumps(req.payload),
+            status=req.status
+        )
+        db.add(new_draft)
+        db.commit()
+        return {"message": "Borrador guardado", "id": new_draft.id}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/draft")
+def get_draft(cliente_id: str, sede_id: str, fecha: str, db: Session = Depends(get_db)):
+    try:
+        fecha_obj = datetime.strptime(fecha, "%Y-%m-%d").date()
+        draft = db.query(DispatchDraft).filter(
+            DispatchDraft.cliente_id == cliente_id,
+            DispatchDraft.sede_id == sede_id,
+            DispatchDraft.fecha == fecha_obj,
+            DispatchDraft.status == "DRAFT"
+        ).first()
+        
+        if not draft:
+            return {"found": False}
+        
+        import json
+        return {
+            "found": True, 
+            "id": draft.id, 
+            "payload": json.loads(draft.payload),
+            "updated_at": draft.updated_at
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
