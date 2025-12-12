@@ -1781,14 +1781,16 @@ class AutoScheduleRequest(BaseModel):
     fecha: str  # YYYY-MM-DD
     quota: int  # Numero de viajes a programar (ej: 5)
     cliente_id: Optional[str] = None # Opcional, si se sabe
+    ciudad: Optional[str] = None # Filtro de ciudad para mayor precision
 
 @app.post("/api/auto-schedule")
 def auto_schedule_trips(req: AutoScheduleRequest, persist: bool = Query(True), db: Session = Depends(get_db)):
 
     try:
         # 1. Obtener recursos disponibles desde API CloudFleet (con filtros locales)
-        vehiculos = listar_vehiculos(sede_id=req.sede_id, cliente_id=req.cliente_id, ciudad=None, centro_costo=None)
-        personal = listar_personal(sede_id=req.sede_id, cliente_id=req.cliente_id, ciudad=None, rol=None)
+        # IMPORTANTE: Pasar req.ciudad asegura que el standby sean solo de esa ciudad
+        vehiculos = listar_vehiculos(sede_id=req.sede_id, cliente_id=req.cliente_id, ciudad=req.ciudad, centro_costo=None)
+        personal = listar_personal(sede_id=req.sede_id, cliente_id=req.cliente_id, ciudad=req.ciudad, rol=None)
         
         conductores = [p for p in personal if "conductor" in (p.rol or "").lower()]
         auxiliares = [p for p in personal if "auxiliar" in (p.rol or "").lower()]
