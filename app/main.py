@@ -1796,6 +1796,7 @@ class AutoScheduleRequest(BaseModel):
 def auto_schedule_trips(req: AutoScheduleRequest, persist: bool = Query(True), db: Session = Depends(get_db)):
 
     try:
+        logger.info(f"AutoSchedule Request: {req.dict()}")
         # 1. Obtener recursos disponibles desde API CloudFleet (con filtros locales)
         # IMPORTANTE: Pasar req.ciudad asegura que el standby sean solo de esa ciudad
         vehiculos = listar_vehiculos(sede_id=req.sede_id, cliente_id=req.cliente_id, ciudad=req.ciudad, centro_costo=None)
