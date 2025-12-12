@@ -68,3 +68,21 @@ def get_quota_for_date(cliente_nombre: str, sede_nombre: str, fecha_str: str) ->
         pass
         
     return 0
+
+
+def get_expected_sedes(cliente_nombre: str) -> list[str]:
+    """
+    Retorna la lista de nombres de sedes configuradas en la matriz para un cliente dado.
+    """
+    if not cliente_nombre:
+        return []
+        
+    c_key = cliente_nombre.upper().strip()
+    sedes = set()
+    
+    # Busqueda exacta y parcial
+    for (k_cli, k_sede) in QUOTA_MATRIX.keys():
+        if k_cli in c_key:
+            sedes.add(k_sede)
+            
+    return sorted(list(sedes))

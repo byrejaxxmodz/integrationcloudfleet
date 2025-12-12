@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.database import engine, get_db, Base
 from app.models import Viaje, ViajeDetalle
-from app.quota_rules import get_quota_for_date
+from app.quota_rules import get_quota_for_date, get_expected_sedes
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
