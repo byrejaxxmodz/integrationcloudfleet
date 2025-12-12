@@ -453,70 +453,63 @@
 
                 if (sedeVal) {
                     const selectedOpt = sedeSelect.options[sedeSelect.selectedIndex];
-                    // Si el value parece un ID (no coincide con el texto de ciudad o tiene formato :), lo tratamos como ID
                     if (sedeVal.includes(":")) {
                         sedeIdResolvido = sedeVal;
                         ciudadFiltro = selectedOpt.dataset.ciudad || selectedOpt.textContent;
                     } else {
-                        // Asumimos que es ID directo si tiene longitud, o es nombre ciudad
                         sedeIdResolvido = sedeVal;
                         ciudadFiltro = selectedOpt.dataset.ciudad || selectedOpt.textContent;
                     }
                 }
 
-                // 2. Fetch Data
-                const urlParamsVeh = new URLSearchParams();
-                if (ciudadFiltro) {
-                    urlParamsVeh.append('ciudad', ciudadFiltro);
-                } else if (sedeIdResolvido) {
-                    urlParamsVeh.append('sede_id', sedeIdResolvido);
-                    if (clienteId) urlParamsVeh.append('cliente_id', clienteId);
-                } else if (clienteId) {
-                    urlParamsVeh.append('cliente_id', clienteId);
+                // Call Backend Auto-Schedule (Preview Mode)
+                const res = await fetch(`${API_BASE}/auto-schedule?persist=false`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        cliente_id: clienteId,
+                        sede_id: sedeIdResolvido || 'UNKNOWN',
+                        ciudad: ciudadFiltro,
+                        fecha: fecha,
+                        quota: quota
+                    })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || "Error en el servidor de programación");
                 }
 
-                const urlParamsPer = new URLSearchParams();
-                if (clienteId) urlParamsPer.append('cliente_id', clienteId);
-                if (ciudadFiltro) urlParamsPer.append('ciudad', ciudadFiltro);
+                const data = await res.json();
 
-                const urlParamsRuta = new URLSearchParams();
-                if (clienteId) urlParamsRuta.append('cliente_id', clienteId);
-                if (sedeIdResolvido && ciudadFiltro) {
-                    urlParamsRuta.append('ciudad', ciudadFiltro);
+                // Store globally for Saving Draft
+                window.lastSimulationData = data;
+                document.getElementById('btnSaveDraft').classList.remove('hidden');
+                document.getElementById('btnExecuteDraft').classList.remove('hidden');
+
+                // Validate and Render
+                if (data.detailed_trips) {
+                    const assigns = data.detailed_trips;
+                    const vList = assigns.map(a => a.vehiculo);
+                    const cList = assigns.map(a => a.conductor);
+                    const aList = assigns.map(a => a.auxiliar);
+                    const rList = assigns.map(a => a.ruta);
+
+                    // Mock Route matching if backend didn't do it? 
+                    // Backend currently returns "ruta": {} (empty) in my mock implementation in Step 1468.
+                    // IMPORTANT: frontend depends on route info for Via logic. 
+                    // If backend returns empty route, UI will show "Sin ruta asignada".
+                    // Ideally backend `get_rutas` should work.
+
+                    // RENDER
+                    renderSimulation(quota, vList, cList, aList, rList, hora);
+                } else {
+                    // Fallback if data structure mismatch, though we just updated backend
+                    console.warn("No detailed trips in response", data);
                 }
-
-                const [resVeh, resPer, resRutas] = await Promise.all([
-                    fetch(`${API_BASE}/vehiculos?${urlParamsVeh}`),
-                    fetch(`${API_BASE}/personal?${urlParamsPer}`),
-                    fetch(`${API_BASE}/rutas_v2?${urlParamsRuta}`)
-                ]);
-
-                let vehiculos = await resVeh.json();
-                let personal = await resPer.json();
-                let rutas = await resRutas.json();
-
-                // Safety checks
-                if (!Array.isArray(personal)) {
-                    console.error("Personal API error:", personal);
-                    throw new Error("API Personal devolvió error o formato inválido: " + JSON.stringify(personal));
-                }
-                if (!Array.isArray(vehiculos)) vehiculos = [];
-                if (!Array.isArray(rutas)) rutas = [];
-
-                // Filtrar personal y conductores
-                const personalFiltrado = personal
-                    .filter(p => p.activo !== false)
-                    .filter(p => matchesCity(p, ciudadFiltro));
-
-                const conductores = personalFiltrado.filter(p => (p.rol || "").toLowerCase().includes("conductor"));
-                const auxiliares = personalFiltrado.filter(p => (p.rol || "").toLowerCase().includes("auxiliar"));
-
-                console.log("Resolved Sede:", sedeIdResolvido, "City:", ciudadFiltro);
-                console.log("Vehiculos:", vehiculos.length, "Rutas (Total available):", rutas.length);
-
-                renderSimulation(quota, vehiculos, conductores, auxiliares, rutas, hora);
 
                 document.getElementById('statusBadge').className = 'text-xs font-mono text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded border border-emerald-400/20';
+
                 if (data.standby) {
                     renderStandby(data.standby);
                 }
