@@ -1482,25 +1482,33 @@ def listar_personal(
         raise HTTPException(status_code=503, detail="CloudFleet API no configurada")
     
     try:
-        personal_data = get_personas()
-        # Si hay filtros, limitamos paginas para reducir latencia
-        max_pages = 0
-        if ciudad or cliente_id or rol:
-            max_pages = int(os.getenv("PERSONAL_MAX_PAGES_FILTER", "10"))
-        if max_pages:
-            # Volver a obtener con limite (requiere soporte de max_pages en cliente)
-            try:
-                personal_data = get_personas(max_pages=max_pages)  # type: ignore[arg-type]
-            except TypeError:
-                # Si la firma no acepta max_pages, continuamos con el resultado actual
-                personal_data = personal_data
+        # Aumentamos limite de paginas para traer mas personal (FIX: Missing drivers)
+        # 10 paginas eran ~500 registros, subimos a 100 (~5000 registros) para asegurar cobertura
+        max_pages = int(os.getenv("PERSONAL_MAX_PAGES_FILTER", "100"))
+        
+        # Obtener con el limite ampliado
+        try:
+             personal_data = get_personas(max_pages=max_pages)  # type: ignore[arg-type]
+        except TypeError:
+             personal_data = get_personas()
+
         ciudades_cliente = _ciudades_por_cliente(cliente_id)
         personal = []
+        
+        # Helper de normalizacion (acentos)
+        import unicodedata
+        def normalize_str(s):
+            if not s: return ""
+            return ''.join(c for c in unicodedata.normalize('NFD', str(s)) if unicodedata.category(c) != 'Mn').lower()
+
+        ciudad_norm = normalize_str(ciudad) if ciudad else ""
+
         for item in personal_data:
             # Obtener ciudad (puede ser objeto o string)
             city_obj = item.get("city")
             ubicacion = city_obj.get("name", "") if isinstance(city_obj, dict) else (city_obj or "")
-            
+            ubicacion_norm = normalize_str(ubicacion)
+
             # Obtener posicion/rol
             position_type = item.get("positionType", {})
             rol_persona = position_type.get("name", "other") if isinstance(position_type, dict) else "other"
@@ -1510,9 +1518,9 @@ def listar_personal(
             last_name = item.get("lastName", "")
             nombre_completo = f"{first_name} {last_name}".strip() or "Sin nombre"
             
-            # Filtrar por ciudad si se especifica
+            # Filtrar por ciudad si se especifica (con normalizacion)
             if ciudad:
-                if not ubicacion or ciudad.lower() not in ubicacion.lower():
+                if not ubicacion or ciudad_norm not in ubicacion_norm:
                     continue
 
             # Filtrar por cliente usando las ciudades de sus sedes
