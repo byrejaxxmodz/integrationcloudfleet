@@ -665,7 +665,7 @@
                 const inputValue = (viaLabel !== 'SIN VIA') ? viaLabel : '';
 
                 // DEFINE VIA INPUT 
-                const viaInput = `
+                const viaInputHtml = `
                     <div class="relative">
                         <input type="text" list="viasList_${i}" 
                             class="bg-slate-800 text-white text-sm rounded px-2 py-1 w-full border border-slate-600 focus:border-blue-500 focus:outline-none" 
@@ -681,7 +681,7 @@
                 tr.className = "hover:bg-white/5 transition-colors group";
                 tr.innerHTML = `
                     <td class="p-4 align-top">
-                        ${viaInput}
+                        ${viaInputHtml}
                     </td>
                     <td class="p-4 align-top">
                          <div class="flex items-start">
