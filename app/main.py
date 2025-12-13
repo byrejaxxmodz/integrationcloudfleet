@@ -95,8 +95,6 @@ def debug_env():
 
 
 
-    
-# ============= MODELOS PYDANTIC =============
 
 class Cliente(BaseModel):
     id: str
@@ -1021,18 +1019,19 @@ def listar_sedes(cliente_id: Optional[str] = Query(None, description="ID del cli
                 
                 # Opcion B: Si no, intentar consulta rapida
                 if not c_name:
-                    # 1. Buscar en lista de clientes (Cached, rapido)
-                    if get_clientes:
-                        try:
-                            all_clients = get_clientes() or []
-                            for c in all_clients:
-                                if str(c.get("id")) == str(cliente_id):
-                                    c_name = c.get("name") or c.get("nombre")
-                                    break
-                        except Exception:
+                    # Usar la misma logica del endpoint /clientes (API + Fallback Camiones)
+                    try:
+                        all_clients = listar_clientes() or []
+                        for c in all_clients:
+                            # 'c' es un objeto Cliente Pydantic
+                            c_id = getattr(c, "id", str(c))
+                            if str(c_id) == str(cliente_id):
+                                c_name = getattr(c, "nombre", getattr(c, "name", ""))
+                                break
+                    except Exception:
                            pass
 
-                    # 2. Si falla, intentar fetch directo (API call)
+                    # 2. Si falla aun (redundante si listar_clientes falla), intentar fetch directo
                     if not c_name and get_cliente:
                          try:
                             cd = get_cliente(cliente_id)
