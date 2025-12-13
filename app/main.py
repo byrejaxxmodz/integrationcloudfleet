@@ -1395,8 +1395,61 @@ def listar_vehiculos(
         raise HTTPException(status_code=503, detail="CloudFleet API no configurada")
     
     try:
-        # Intentar filtrar por cliente desde la API si es posible, y limitar paginas para evitar HANG
-        vehiculos_data = get_camiones(customer_id=cliente_id, max_pages=10)
+        # Helper para detectar si es grupo Linde/Praxair
+        # Esto podria optimizarse con cache, pero por ahora lo hacemos lineal
+        # Necesitamos saber el NOMBRE del cliente actual para decidir
+        
+        target_ids = set()
+        if cliente_id:
+            target_ids.add(str(cliente_id))
+            
+            # Buscar nombre
+            try:
+                c_data = get_cliente(cliente_id) if get_cliente else {}
+                c_name = (c_data.get("name") or "").upper()
+                
+                if "LINDE" in c_name or "PRAXAIR" in c_name:
+                    # Es del grupo. Buscar el ID del otro.
+                    # Buscamos todos los clientes y filtramos.
+                    # OJO: Esto puede ser lento si hay muchos clientes. 
+                    # Asumimos pococos clientes o cache.
+                    all_customers = get_clientes() if get_clientes else []
+                    for c in all_customers:
+                        cn = (c.get("name") or "").upper()
+                        cid = str(c.get("id"))
+                        if cid == str(cliente_id): continue
+                        
+                        # Si soy Linde, busco Praxair. Si soy Praxair, busco Linde.
+                        # O simplemente traigo AMBOS si detecto keywords.
+                        if "LINDE" in c_name:
+                            if "PRAXAIR" in cn: target_ids.add(cid)
+                        elif "PRAXAIR" in c_name:
+                            if "LINDE" in cn: target_ids.add(cid)
+            except Exception as e:
+                logger.warning(f"Error resolviendo counterpart Linde/Praxair: {e}")
+        
+        # Fetch vehicles for ALL target IDs
+        raw_vehicles = []
+        if not target_ids:
+            # Sin filtro o fallo logica, traer normal (o todo si client_id es None)
+            raw_vehicles = get_camiones(customer_id=cliente_id, max_pages=10)
+        else:
+            # Traer para cada ID y mezclar
+            for tid in target_ids:
+                try:
+                    vf = get_camiones(customer_id=tid, max_pages=10) or []
+                    raw_vehicles.extend(vf)
+                except Exception:
+                    pass
+        
+        # Deduplicate by ID
+        vehiculos_data = []
+        seen_ids = set()
+        for v in raw_vehicles:
+            vid = v.get("id")
+            if vid and vid not in seen_ids:
+                seen_ids.add(vid)
+                vehiculos_data.append(v)
         
         
         # Helper de normalizacion (acentos)
@@ -1430,28 +1483,29 @@ def listar_vehiculos(
                     continue
 
             # Filtrar por cliente usando las ciudades de sus sedes
+            # OJO: Si hicimos merge, aqui debemos ser permisivos si el vehiculo viene del "otro" ID pero es valido.
+            
             if cliente_id:
                 match_cliente = False
-                if ciudades_cliente:
+                
+                # Check ID ownership directly against user request OR merged targets
+                v_cust_id = str(item.get("customerId", item.get("cliente_id", "")) or "")
+                if v_cust_id and v_cust_id in target_ids:
+                    match_cliente = True
+                
+                if ciudades_cliente and not match_cliente:
                     match_cliente = bool(ubicacion and ubicacion.lower() in ciudades_cliente)
-                # Si el vehiculo trae customerId, intentamos comparar directo
-                if not match_cliente:
-                    customer_val = str(item.get("customerId", item.get("cliente_id", "")) or "")
-                    if customer_val:
-                        match_cliente = customer_val == str(cliente_id)
+
                 # Fallback: usar centro de costo como proxy de cliente
                 # STRICT MATCHING: Evitar confusiones entre LINDE/PRAXAIR y CHILCO
-                # STRICT MATCHING: Evitar confusiones entre LINDE/PRAXAIR y CHILCO
-                # IMPORTANTE: Ejecutar esta logica SIEMPRE si hay cost_center, para poder EXCLUIR 
-                # vehiculos de la competencia que coinciden por ciudad.
                 if cost_center:
                     centro_id = str(cost_center.get("id") or cost_center.get("code") or "").strip()
                     centro_nombre = (cost_center.get("name") or "").lower()
                     cid = str(cliente_id).lower()
                     
                     # Logica de exclusion mutua explicita
-                    is_linde_req = "linde" in cid or "praxair" in cid
-                    is_chilco_req = "chilco" in cid
+                    is_linde_req = "linde" in cid or (c_name and "LINDE" in c_name.upper()) or (c_name and "PRAXAIR" in c_name.upper())
+                    is_chilco_req = "chilco" in cid or (c_name and "CHILCO" in c_name.upper())
                     
                     cc_is_linde = "linde" in centro_nombre or "praxair" in centro_nombre
                     cc_is_chilco = "chilco" in centro_nombre
@@ -1481,7 +1535,7 @@ def listar_vehiculos(
                 # Si no hay forma de saber, no descartamos (salvo que sea un cliente explicito)
                 if not match_cliente and not (ciudades_cliente or item.get("customerId") or cost_center):
                      # Si estamos filtrando por un cliente especifico y el vehiculo es huerfano,
-                     # mejor NO mostrarlo para evitar ruido (User Request: "No pertenecen al CC correcto")
+                     # mejor NO mostrarlo para evitar ruido
                      if cliente_id:
                         match_cliente = False
                      else:
