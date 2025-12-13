@@ -33,6 +33,40 @@
                 }
             }
         }
+
+        // --- Helper Functions for Auto-Update ---
+
+        function updateVehicleInfo(input) {
+            const val = input.value;
+            if (!val || !window.simResources) return;
+
+            // Find vehicle in global list
+            const found = window.simResources.vehicles.find(v => v.placa === val);
+            if (found) {
+                // Update Type display
+                // Navigate DOM: input -> div parent -> div parent -> div child? 
+                // Currently: input is sibling to .veh-type in same div
+                const typeDiv = input.parentElement.querySelector('.veh-type');
+                if (typeDiv) {
+                    typeDiv.textContent = found.tipo || 'Vehículo';
+                }
+            }
+        }
+
+        function updateDriverInfo(input) {
+            const val = input.value;
+            if (!val || !window.simResources) return;
+
+            // Find driver by Name
+            const found = window.simResources.drivers.find(d => d.nombre === val);
+            if (found) {
+                // Update Document ID input (sibling)
+                const docInput = input.parentElement.querySelector('.driver-doc');
+                if (docInput) {
+                    docInput.value = found.documento || '';
+                }
+            }
+        }
     </script>
 
     <style>
@@ -560,8 +594,9 @@
 
                 const allV = [...vList, ...(data.standby?.vehicles || [])].filter(x => x);
                 const allC = [...cList, ...(data.standby?.drivers || [])].filter(x => x);
+                const allA = [...aList, ...(data.standby?.assistants || [])].filter(x => x);
 
-                renderSimulation(assigns.length, vList, cList, aList, rList, hora, allV, allC);
+                renderSimulation(assigns.length, vList, cList, aList, rList, hora, allV, allC, allA);
 
                 document.getElementById('statusBadge').className = 'bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold border border-emerald-500/20';
                 document.getElementById('statusBadge').innerHTML = '<i class="fas fa-check mr-1"></i> SIMULACIÓN OK';
@@ -575,22 +610,31 @@
             }
         }
 
-        function renderSimulation(quota, vehiculos, conductores, auxiliares, rutas, hora, allAvailableVehicles = [], allAvailableDrivers = []) {
+        function renderSimulation(quota, vehiculos, conductores, auxiliares, rutas, hora, allAvailableVehicles = [], allAvailableDrivers = [], allAvailableAssistants = []) {
             document.getElementById('emptyState').classList.add('hidden');
             document.getElementById('resultContent').classList.remove('hidden');
 
             const tbody = document.getElementById('resultTableBody');
             tbody.innerHTML = '';
 
-            // Build Unified DataLists for Vehicles and Drivers
+            // Build Unified DataLists and Global Resource Map
             const uniqueV = [...new Map(allAvailableVehicles.map(item => [item.placa, item])).values()];
             const uniqueC = [...new Map(allAvailableDrivers.map(item => [item.documento, item])).values()];
+            const uniqueA = [...new Map(allAvailableAssistants.map(item => [item.id || item.nombre, item])).values()];
 
-            const vehOptions = uniqueV.map(v => `<option value="${v.placa}">${v.tipo || 'Vehiculo'} - ${cityValue(v)}</option>`).join('');
+            // Store strictly for lookup
+            window.simResources = {
+                vehicles: uniqueV,
+                drivers: uniqueC,
+                assistants: uniqueA
+            };
+
+            const vehOptions = uniqueV.map(v => `<option value="${v.placa}">${v.tipo || 'Vehículo'} - ${cityValue(v)}</option>`).join('');
             const condOptions = uniqueC.map(c => `<option value="${c.nombre}">${c.documento || ''} - ${cityValue(c)}</option>`).join('');
             const condDocOptions = uniqueC.map(c => `<option value="${c.documento}">${c.nombre} - ${cityValue(c)}</option>`).join('');
+            const auxOptions = uniqueA.map(a => `<option value="${a.nombre}">${cityValue(a)}</option>`).join('');
 
-            // Inject DataLists globally in this section if not exists or rebuild
+            // Inject DataLists globally
             let dlContainer = document.getElementById('simulationDataLists');
             if (!dlContainer) {
                 dlContainer = document.createElement('div');
@@ -602,6 +646,7 @@
                 <datalist id="listVehicles">${vehOptions}</datalist>
                 <datalist id="listDrivers">${condOptions}</datalist>
                 <datalist id="listDriversDocs">${condDocOptions}</datalist>
+                <datalist id="listAuxiliaries">${auxOptions}</datalist>
             `;
 
             // 1. Pre-calculate "Route Candidates" (Route + Specific Via combination)
@@ -722,8 +767,8 @@
                          <div class="flex items-start">
                             <div class="mt-1">${vehIcon}</div>
                             <div>
-                                <input type="text" list="listVehicles" class="bg-transparent border-b border-slate-600 text-slate-200 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${veh ? veh.placa : ''}" placeholder="Placa..." onclick="this.select()">
-                                <div class="text-xs text-slate-500">${veh ? (veh.tipo || 'Vehículo') : 'No asignado'}</div>
+                                <input type="text" list="listVehicles" class="bg-transparent border-b border-slate-600 text-slate-200 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${veh ? veh.placa : ''}" placeholder="Placa..." onclick="this.select()" oninput="updateVehicleInfo(this)">
+                                <div class="text-xs text-slate-500 veh-type">${veh ? (veh.tipo || 'Vehículo') : 'No asignado'}</div>
                             </div>
                         </div>
                     </td>
@@ -731,8 +776,8 @@
                          <div class="flex items-start">
                             <div class="mt-1">${condIcon}</div>
                             <div>
-                                <input type="text" list="listDrivers" class="bg-transparent border-b border-slate-600 text-slate-200 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${cond ? cond.nombre : ''}" placeholder="Conductor..." onclick="this.select()">
-                                <input type="text" list="listDriversDocs" class="bg-transparent text-xs text-slate-500 w-full focus:outline-none focus:text-slate-300" value="${cond ? (cond.documento || '') : ''}" placeholder="Cédula..." onclick="this.select()">
+                                <input type="text" list="listDrivers" class="bg-transparent border-b border-slate-600 text-slate-200 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${cond ? cond.nombre : ''}" placeholder="Conductor..." onclick="this.select()" oninput="updateDriverInfo(this)">
+                                <input type="text" list="listDriversDocs" class="bg-transparent text-xs text-slate-500 w-full focus:outline-none focus:text-slate-300 driver-doc" value="${cond ? (cond.documento || '') : ''}" placeholder="Cédula..." onclick="this.select()">
                             </div>
                          </div>
                     </td>
@@ -740,7 +785,7 @@
                          <div class="flex items-start">
                             <div class="mr-2 mt-1 px-1 rounded bg-slate-800 text-xs text-slate-400">AUX</div>
                             <div>
-                                <input type="text" class="bg-transparent border-b border-slate-600 text-slate-400 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${aux ? aux.nombre : ''}" placeholder="Auxiliar...">
+                                <input type="text" list="listAuxiliaries" class="bg-transparent border-b border-slate-600 text-slate-400 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${aux ? aux.nombre : ''}" placeholder="Auxiliar..." onclick="this.select()">
                             </div>
                          </div>
                     </td>
@@ -801,8 +846,9 @@
                 const hora = "06:00 AM"; // Mock or saved
                 const allV = [...vList, ...(payload.standby?.vehicles || [])].filter(x => x);
                 const allC = [...cList, ...(payload.standby?.drivers || [])].filter(x => x);
+                const allA = [...aList, ...(payload.standby?.assistants || [])].filter(x => x);
 
-                renderSimulation(quota, vList, cList, aList, rList, hora, allV, allC);
+                renderSimulation(quota, vList, cList, aList, rList, hora, allV, allC, allA);
                 renderStandby(payload.standby);
 
                 document.getElementById('emptyState').classList.add('hidden');
