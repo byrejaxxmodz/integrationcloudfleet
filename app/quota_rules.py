@@ -61,6 +61,10 @@ def get_quota_for_date(cliente_nombre: str, sede_nombre: str, fecha_str: str) ->
         c_key = cliente_nombre.upper().strip()
         s_key = sede_nombre.upper().strip()
         
+        # AGGRESSIVE ALIAS: PRAXAIR IS LINDE
+        if "PRAXAIR" in c_key:
+            c_key = "CCM LINDE"
+            
         print(f"DEBUG_QUOTA: Searching for Client='{c_key}', Sede='{s_key}', Day={day_of_week}")
 
         # Busqueda exacta primero
