@@ -558,7 +558,10 @@
                 const aList = assigns.map(a => a.auxiliar);
                 const rList = assigns.map(a => a.ruta); // Assuming we pass route info
 
-                renderSimulation(assigns.length, vList, cList, aList, rList, hora);
+                const allV = [...vList, ...(data.standby?.vehicles || [])].filter(x => x);
+                const allC = [...cList, ...(data.standby?.drivers || [])].filter(x => x);
+
+                renderSimulation(assigns.length, vList, cList, aList, rList, hora, allV, allC);
 
                 document.getElementById('statusBadge').className = 'bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold border border-emerald-500/20';
                 document.getElementById('statusBadge').innerHTML = '<i class="fas fa-check mr-1"></i> SIMULACIÓN OK';
@@ -572,12 +575,34 @@
             }
         }
 
-        function renderSimulation(quota, vehiculos, conductores, auxiliares, rutas, hora) {
+        function renderSimulation(quota, vehiculos, conductores, auxiliares, rutas, hora, allAvailableVehicles = [], allAvailableDrivers = []) {
             document.getElementById('emptyState').classList.add('hidden');
             document.getElementById('resultContent').classList.remove('hidden');
 
             const tbody = document.getElementById('resultTableBody');
             tbody.innerHTML = '';
+
+            // Build Unified DataLists for Vehicles and Drivers
+            const uniqueV = [...new Map(allAvailableVehicles.map(item => [item.placa, item])).values()];
+            const uniqueC = [...new Map(allAvailableDrivers.map(item => [item.documento, item])).values()];
+
+            const vehOptions = uniqueV.map(v => `<option value="${v.placa}">${v.tipo || 'Vehiculo'} - ${cityValue(v)}</option>`).join('');
+            const condOptions = uniqueC.map(c => `<option value="${c.nombre}">${c.documento || ''} - ${cityValue(c)}</option>`).join('');
+            const condDocOptions = uniqueC.map(c => `<option value="${c.documento}">${c.nombre} - ${cityValue(c)}</option>`).join('');
+
+            // Inject DataLists globally in this section if not exists or rebuild
+            let dlContainer = document.getElementById('simulationDataLists');
+            if (!dlContainer) {
+                dlContainer = document.createElement('div');
+                dlContainer.id = 'simulationDataLists';
+                dlContainer.style.display = 'none';
+                document.getElementById('resultContent').appendChild(dlContainer);
+            }
+            dlContainer.innerHTML = `
+                <datalist id="listVehicles">${vehOptions}</datalist>
+                <datalist id="listDrivers">${condOptions}</datalist>
+                <datalist id="listDriversDocs">${condDocOptions}</datalist>
+            `;
 
             // 1. Pre-calculate "Route Candidates" (Route + Specific Via combination)
             const routeCandidates = [];
@@ -697,7 +722,7 @@
                          <div class="flex items-start">
                             <div class="mt-1">${vehIcon}</div>
                             <div>
-                                <input type="text" class="bg-transparent border-b border-slate-600 text-slate-200 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${veh ? veh.placa : ''}" placeholder="Placa...">
+                                <input type="text" list="listVehicles" class="bg-transparent border-b border-slate-600 text-slate-200 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${veh ? veh.placa : ''}" placeholder="Placa..." onclick="this.select()">
                                 <div class="text-xs text-slate-500">${veh ? (veh.tipo || 'Vehículo') : 'No asignado'}</div>
                             </div>
                         </div>
@@ -706,8 +731,8 @@
                          <div class="flex items-start">
                             <div class="mt-1">${condIcon}</div>
                             <div>
-                                <input type="text" class="bg-transparent border-b border-slate-600 text-slate-200 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${cond ? cond.nombre : ''}" placeholder="Conductor...">
-                                <input type="text" class="bg-transparent text-xs text-slate-500 w-full focus:outline-none focus:text-slate-300" value="${cond ? (cond.documento || '') : ''}" placeholder="Cédula...">
+                                <input type="text" list="listDrivers" class="bg-transparent border-b border-slate-600 text-slate-200 text-sm w-full focus:outline-none focus:border-blue-500 mb-1" value="${cond ? cond.nombre : ''}" placeholder="Conductor..." onclick="this.select()">
+                                <input type="text" list="listDriversDocs" class="bg-transparent text-xs text-slate-500 w-full focus:outline-none focus:text-slate-300" value="${cond ? (cond.documento || '') : ''}" placeholder="Cédula..." onclick="this.select()">
                             </div>
                          </div>
                     </td>
@@ -774,7 +799,10 @@
                 // TODO: Save edits in payload and restore them.
 
                 const hora = "06:00 AM"; // Mock or saved
-                renderSimulation(quota, vList, cList, aList, rList, hora);
+                const allV = [...vList, ...(payload.standby?.vehicles || [])].filter(x => x);
+                const allC = [...cList, ...(payload.standby?.drivers || [])].filter(x => x);
+
+                renderSimulation(quota, vList, cList, aList, rList, hora, allV, allC);
                 renderStandby(payload.standby);
 
                 document.getElementById('emptyState').classList.add('hidden');
