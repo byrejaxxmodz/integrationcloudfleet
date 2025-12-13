@@ -24,7 +24,7 @@ try:
     from app.cloudfleet import (
         get_clientes, get_cliente, get_sedes, get_sede,
         get_rutas, get_ruta, get_camiones, get_personas,
-        get_persona, get_travels, get_travel
+        get_persona, get_travels, get_travel, refresh_all_cache
     )
 except Exception:
     # Permite ejecutar aunque no exista cloudfleet.py configurado
@@ -39,6 +39,7 @@ except Exception:
     get_persona = None
     get_travels = None
     get_travel = None
+    refresh_all_cache = None
 
 # ParÃ¡metros de negocio
 MAX_DIAS_CONSECUTIVOS = int(os.getenv("MAX_DIAS_CONSECUTIVOS", "6"))
@@ -1902,6 +1903,21 @@ def schedule(req: ScheduleRequest):
             raise HTTPException(status_code=500, detail=str(exc))
         return _asignaciones_dummy()
 
+
+@app.post("/api/cache/refresh")
+def api_refresh_cache(db: Session = Depends(get_db)):
+    """
+    Endpoint administrativo para forzar recarga de cache CloudFleet.
+    """
+    try:
+        if refresh_all_cache:
+            refresh_all_cache()
+            return {"message": "Cache refrescado exitosamente"}
+        else:
+            raise HTTPException(status_code=503, detail="Funcion no disponible")
+    except Exception as e:
+        logger.error(f"Error refrescando cache: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============= SERVIR INTERFAZ WEB =============
 

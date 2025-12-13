@@ -29,6 +29,8 @@ def ttl_lru_cache(seconds: int, maxsize: int = 128):
         @wraps(func)
         def wrapped(*args, **kwargs):
             return inner(time.time() // seconds, *args, **kwargs)
+        
+        wrapped.cache_clear = inner.cache_clear
         return wrapped
     return wrapper
 
@@ -416,3 +418,44 @@ def get_persona(person_id: str) -> dict[str, Any]:
     Endpoint: /people/{personId}
     """
     return _get(f"people/{person_id}")
+
+
+def refresh_all_cache():
+    """
+    Fuerza la recarga de todas las caches (memoria y disco).
+    """
+    logger.info("Starting Full Cache Refresh...")
+    
+    # 1. Clear In-Memory Caches
+    try:
+        get_cliente.cache_clear()
+        get_sedes.cache_clear()
+        get_sede.cache_clear()
+        get_rutas.cache_clear()
+        get_ruta.cache_clear()
+        logger.info("In-memory caches cleared.")
+    except Exception as e:
+        logger.warning(f"Error clearing memory cache: {e}")
+
+    # 2. Clear File Cache
+    files = ["vehicles_all.json", "people_all.json"]
+    for fname in files:
+        try:
+            p = _get_cache_path(fname.replace(".json", "")) # _get_cache_path appends .json
+            if os.path.exists(p):
+                os.remove(p)
+                logger.info(f"Deleted cache file: {p}")
+        except Exception as e:
+            logger.warning(f"Error deleting file cache {fname}: {e}")
+
+    # 3. Warm up heavy caches
+    try:
+        logger.info("Warming up Vehicles cache...")
+        get_camiones() # This will fetch and save
+        logger.info("Warming up People cache...")
+        get_personas() # This will fetch and save
+    except Exception as e:
+        logger.error(f"Error warming up cache: {e}")
+        # Non-fatal, next request will try again
+    
+    logger.info("Cache Refresh Completed.")

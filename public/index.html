@@ -411,11 +411,6 @@
                 </div>
 
                 <div class="filter-group">
-                    <label for="filterCiudad">Ciudad (vehiculos y personal)</label>
-                    <input type="text" id="filterCiudad" placeholder="Ej: Bogota">
-                </div>
-
-                <div class="filter-group">
                     <label for="filterRol">Rol del personal</label>
                     <select id="filterRol">
                         <option value="">Todos</option>
@@ -429,22 +424,20 @@
                 </div>
             </div>
             <div class="filters-row">
-                <div class="filter-group">
+                <div class="filter-group" style="flex: 2;">
                     <label for="filterSede">Sede</label>
                     <select id="filterSede" onchange="actualizarFiltrosDependientes()">
                         <option value="">Todas las sedes</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label for="filterCentroCosto">Centro de Costos</label>
-                    <select id="filterCentroCosto">
-                        <option value="">Todos</option>
                     </select>
                 </div>
             </div>
             <div class="actions">
                 <button id="btnBuscar" onclick="aplicarFiltros()">Buscar</button>
                 <button class="secondary" onclick="limpiarFiltros()">Limpiar</button>
+                <button class="warning" onclick="actualizarCache()"
+                    title="Forzar recarga completa desde CloudFleet API">
+                    <span class="icon">↻</span> Actualizar Caché
+                </button>
             </div>
         </div>
 
@@ -536,17 +529,9 @@
                 cargarDatos();
             });
 
-            document.getElementById('filterCentroCosto').addEventListener('change', () => {
-                cargarDatos();
-            });
-
-            // Ciudad ya no tiene sugeridor de rutas, solo recarga datos manual o debounced?
-            // El usuario dijo "la busqueda por ciudad dejalo". Lo ideal es no recargar en cada tecla.
-            // Dejamos que use el boton "Buscar" para texto libre, o un debounce.
-            // Por consistencia con lo anterior, solia tener un listener. Lo quitamos para evitar spam.
+            // Removed City and Cost Center listeners
 
             await cargarClientes();
-
             await cargarDatos();
         }
 
@@ -608,24 +593,19 @@
         async function cargarDatos() {
             setLoading(true);
             const clienteId = document.getElementById('filterCliente').value;
-            const ciudad = document.getElementById('filterCiudad').value.trim();
+            // Removed filterCiudad and filterCentroCosto
             const sedeId = document.getElementById('filterSede').value;
-            const centroCosto = document.getElementById('filterCentroCosto').value;
             const rol = document.getElementById('filterRol').value;
             soloActivos = document.getElementById('filterSoloActivos').checked;
 
             try {
                 // 1. Cargar Vehiculos y Personal en paralelo
                 await Promise.all([
-                    cargarVehiculos({ clienteId, ciudad, sedeId, centroCosto }),
-                    cargarPersonal({ clienteId, ciudad, sedeId, rol, soloActivos }),
+                    cargarVehiculos({ clienteId, sedeId }),
+                    cargarPersonal({ clienteId, sedeId, rol, soloActivos }),
                 ]);
 
-                // 2. Poblar Centros de Costo dinamicamente basados en los vehiculos cargados
-                // Solo si NO se esta filtrando ya por uno (para no resetear el filtro)
-                if (!centroCosto) {
-                    poblarCentrosCosto();
-                }
+                // Removed poblarCentrosCosto
 
                 actualizarEstadisticas();
             } finally {
@@ -656,37 +636,7 @@
             }
         }
 
-        function poblarCentrosCosto() {
-            const select = document.getElementById('filterCentroCosto');
-            const currentVal = select.value;
-            // Guardar seleccion actual si existe
-
-            const centros = new Set();
-            vehiculosData.forEach(v => {
-                const cc = v.datos_adicionales?.costCenter;
-                if (cc) {
-                    // Puede ser objeto o string
-                    const val = typeof cc === 'string' ? cc : (cc.name || cc.code);
-                    if (val) centros.add(val);
-                }
-                // Tambien revisar "Centro de Costo" en datos_adicionales planos
-                if (v.datos_adicionales?.centro_costo) centros.add(v.datos_adicionales.centro_costo);
-            });
-
-            // Limpiar pero mantener opcion 'Todos'
-            select.innerHTML = '<option value="">Todos</option>';
-
-            Array.from(centros).sort().forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c;
-                opt.textContent = c;
-                select.appendChild(opt);
-            });
-
-            if (currentVal && centros.has(currentVal)) {
-                select.value = currentVal;
-            }
-        }
+        // Removed poblarCentrosCosto function
 
         function actualizarFiltrosDependientes() {
             // Si cambia la Sede, podriamos querer refiltrar
@@ -694,13 +644,11 @@
             // El usuario suele pulsar Buscar.
         }
 
-        async function cargarVehiculos({ clienteId = '', ciudad = '', sedeId = '', centroCosto = '' } = {}) {
+        async function cargarVehiculos({ clienteId = '', sedeId = '' } = {}) {
             try {
                 const query = buildQuery({
                     cliente_id: clienteId,
-                    ciudad: ciudad || undefined,
-                    sede_id: sedeId || undefined,
-                    centro_costo: centroCosto || undefined
+                    sede_id: sedeId || undefined
                 });
                 const url = `${API_BASE}/vehiculos${query}`;
                 const response = await fetch(url);
@@ -758,11 +706,10 @@
             }
         }
 
-        async function cargarPersonal({ clienteId = '', ciudad = '', sedeId = '', rol = '', soloActivos = false } = {}) {
+        async function cargarPersonal({ clienteId = '', sedeId = '', rol = '', soloActivos = false } = {}) {
             try {
                 const query = buildQuery({
                     cliente_id: clienteId,
-                    ciudad: ciudad || undefined,
                     sede_id: sedeId || undefined,
                     rol: rol || undefined,
                 });
@@ -775,8 +722,7 @@
                 personalData = personalData.filter(p => {
                     const activoOk = !soloActivos || p.activo !== false;
                     const rolOk = !rol || (p.rol || '').toLowerCase().includes(rol.toLowerCase());
-                    const ciudadOk = !ciudad || (p.ubicacion_ciudad || '').toLowerCase().includes(ciudad.toLowerCase());
-                    return activoOk && rolOk && ciudadOk;
+                    return activoOk && rolOk;
                 });
                 document.getElementById('personalCount').textContent = personalData.length;
 
@@ -1169,23 +1115,39 @@
 
         async function limpiarFiltros() {
             document.getElementById('filterCliente').value = '';
-            document.getElementById('filterCiudad').value = '';
+            // Removed filterCiudad cleanup
             document.getElementById('filterSede').innerHTML = '<option value="">Todas las sedes</option>';
-            document.getElementById('filterCentroCosto').innerHTML = '<option value="">Todos</option>';
+            // Removed filterCentroCosto cleanup
             document.getElementById('filterRol').value = '';
             document.getElementById('filterSoloActivos').checked = true;
 
-            tripState.clienteId = '';
-            tripState.ciudad = '';
-            tripState.vehiculoId = '';
-            tripState.rutaCodigo = '';
-            tripState.viaCode = '';
-            tripState.conductorId = '';
-            tripState.auxiliarId = '';
-            syncTripInputsFromState();
+            // Clean trip state if exists or kept
+            // ...
 
             // Reload all data without filters
             await cargarDatos();
+        }
+
+        async function actualizarCache() {
+            if (!confirm('¿Estás seguro de refrescar toda la caché? Esto consultará CloudFleet y puede tardar unos segundos.')) return;
+
+            const btn = document.querySelector('button[onclick="actualizarCache()"]');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="icon">⌛</span> Actualizando...';
+
+            try {
+                const res = await fetch(`${API_BASE}/api/cache/refresh`, { method: 'POST' });
+                if (!res.ok) throw new Error('Error en el servidor');
+                const data = await res.json();
+                alert('Caché actualizada. ' + (data.message || ''));
+                await cargarDatos();
+            } catch (e) {
+                alert('Error al actualizar caché: ' + e);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
         }
 
         window.addEventListener('load', inicializar);
