@@ -1441,7 +1441,10 @@ def listar_vehiculos(
                         match_cliente = customer_val == str(cliente_id)
                 # Fallback: usar centro de costo como proxy de cliente
                 # STRICT MATCHING: Evitar confusiones entre LINDE/PRAXAIR y CHILCO
-                if not match_cliente and cost_center:
+                # STRICT MATCHING: Evitar confusiones entre LINDE/PRAXAIR y CHILCO
+                # IMPORTANTE: Ejecutar esta logica SIEMPRE si hay cost_center, para poder EXCLUIR 
+                # vehiculos de la competencia que coinciden por ciudad.
+                if cost_center:
                     centro_id = str(cost_center.get("id") or cost_center.get("code") or "").strip()
                     centro_nombre = (cost_center.get("name") or "").lower()
                     cid = str(cliente_id).lower()
@@ -1453,21 +1456,27 @@ def listar_vehiculos(
                     cc_is_linde = "linde" in centro_nombre or "praxair" in centro_nombre
                     cc_is_chilco = "chilco" in centro_nombre
                     
+                    explicit_mismatch = False
                     if is_linde_req and cc_is_chilco:
-                        match_cliente = False # Explicit Fail
+                        explicit_mismatch = True
                     elif is_chilco_req and cc_is_linde:
-                        match_cliente = False # Explicit Fail
-                    else:
-                        # Match positivo si coinciden substrings significativos
-                        if centro_id and cid in centro_id.lower():
-                             match_cliente = True
-                        elif centro_nombre and cid in centro_nombre:
-                             match_cliente = True
-                        # Match si el CC contiene el nombre del cliente (ej: "CCM LINDE" contains "LINDE")
-                        elif is_linde_req and cc_is_linde:
-                             match_cliente = True
-                        elif is_chilco_req and cc_is_chilco:
-                             match_cliente = True
+                        explicit_mismatch = True
+
+                    explicit_match = False
+                    if centro_id and cid in centro_id.lower():
+                        explicit_match = True
+                    elif centro_nombre and cid in centro_nombre:
+                        explicit_match = True
+                    elif is_linde_req and cc_is_linde:
+                        explicit_match = True
+                    elif is_chilco_req and cc_is_chilco:
+                        explicit_match = True
+
+                    # Aplicar decisiones
+                    if explicit_mismatch:
+                        match_cliente = False # Overrides City Match
+                    elif explicit_match:
+                        match_cliente = True  # Overrides City Mismatch
 
                 # Si no hay forma de saber, no descartamos (salvo que sea un cliente explicito)
                 if not match_cliente and not (ciudades_cliente or item.get("customerId") or cost_center):
