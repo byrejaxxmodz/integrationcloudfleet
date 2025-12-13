@@ -1400,6 +1400,7 @@ def listar_vehiculos(
         # Necesitamos saber el NOMBRE del cliente actual para decidir
         
         target_ids = set()
+        c_name = ""
         if cliente_id:
             target_ids.add(str(cliente_id))
             
