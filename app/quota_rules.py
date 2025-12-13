@@ -71,11 +71,25 @@ def get_quota_for_date(cliente_nombre: str, sede_nombre: str, fecha_str: str) ->
              print(f"DEBUG_QUOTA: No exact match. Trying fuzzy...")
         
         # Búsqueda parcial si no hay exacta (ej: "CCM LINDE SAS" -> "CCM LINDE")
+        # Búsqueda parcial si no hay exacta
         if not rule:
-            for (k_cli, k_sede), v_rule in QUOTA_MATRIX.items():
-                if k_cli in c_key and k_sede in s_key:
-                    rule = v_rule
-                    break
+            
+            # ALIAS HARDCODED: PRAXAIR -> LINDE
+            # Si el cliente es Praxair y no encontró regla propia, intenta buscar como LINDE
+            if "PRAXAIR" in c_key and not rule:
+                c_key_alias = c_key.replace("PRAXAIR", "LINDE")
+                print(f"DEBUG_QUOTA: Applying Alias PRAXAIR->LINDE. New key: '{c_key_alias}'")
+                rule = QUOTA_MATRIX.get((c_key_alias, s_key))
+                
+            if not rule:
+                for (k_cli, k_sede), v_rule in QUOTA_MATRIX.items():
+                    # Check exact or partial containment
+                    match_c = k_cli in c_key or (c_key in k_cli)
+                    match_s = k_sede in s_key or (s_key in k_sede)
+                    
+                    if match_c and match_s:
+                        rule = v_rule
+                        break
         
         if rule:
             return rule[day_of_week]
