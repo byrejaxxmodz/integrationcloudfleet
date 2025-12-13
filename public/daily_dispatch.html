@@ -447,9 +447,6 @@
             const fechaVal = document.getElementById('selFecha').value;
             const quotaInput = document.getElementById('selQuota');
 
-            // Log for debugging
-            console.log(`[AutoQuota] Check: Client="${clienteName}", City="${sedeCity}", Date="${fechaVal}"`);
-
             if (clienteName && sedeCity && fechaVal) {
                 // Determine Day of Week (0=Sun, 6=Sat)
                 // Note: input type="date" value is YYYY-MM-DD. 
@@ -459,7 +456,6 @@
                 // new Date(y, m-1, d)
                 const dateObj = new Date(parseInt(sections[0]), parseInt(sections[1]) - 1, parseInt(sections[2]));
                 const dayIndex = dateObj.getDay();
-                console.log(`[AutoQuota] DayIndex=${dayIndex} (0=Sun)`);
 
                 // Lookup
                 let foundQuota = null;
@@ -472,7 +468,6 @@
                 for (const key of Object.keys(QUOTA_TABLE)) {
                     if (clienteName.includes(key)) {
                         targetParams = QUOTA_TABLE[key];
-                        console.log(`[AutoQuota] Matched Table Key: ${key}`);
                         break;
                     }
                 }
@@ -491,19 +486,11 @@
 
                     if (cityKey) {
                         foundQuota = targetParams[cityKey][dayIndex];
-                        console.log(`[AutoQuota] Found Quota for ${cityKey}: ${foundQuota}`);
-                    } else {
-                        console.warn(`[AutoQuota] City "${normCity}" not found in table for this client.`);
                     }
-                } else {
-                    console.warn(`[AutoQuota] Client table not found for "${clienteName}"`);
                 }
 
                 if (foundQuota !== null) {
                     quotaInput.value = foundQuota;
-
-                    // Debug info for user hover
-                    quotaInput.title = `Auto-Quota: ${foundQuota} (Day ${dayIndex}, Key ${cityKey || '?'})`;
 
                     // Visual feedback
                     quotaInput.classList.remove("bg-blue-600", "text-white", "font-bold");
