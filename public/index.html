@@ -430,14 +430,16 @@
             </div>
             <div class="filters-row">
                 <div class="filter-group">
-                    <label for="filterRouteCode">Codigo de ruta (sugerido)</label>
-                    <input type="text" id="filterRouteCode" placeholder="Ej: CHL-YUM-VAR">
-                    <span class="hint">Se arma con cliente + ciudad y el sufijo VAR.</span>
+                    <label for="filterSede">Sede</label>
+                    <select id="filterSede" onchange="actualizarFiltrosDependientes()">
+                        <option value="">Todas las sedes</option>
+                    </select>
                 </div>
                 <div class="filter-group">
-                    <label for="filterViaCode">Via (viaCode)</label>
-                    <input type="text" id="filterViaCode" placeholder="Ej: RYP">
-                    <span class="hint">Opcional: usa viaCode para reducir los viajes.</span>
+                    <label for="filterCentroCosto">Centro de Costos</label>
+                    <select id="filterCentroCosto">
+                        <option value="">Todos</option>
+                    </select>
                 </div>
             </div>
             <div class="actions">
@@ -469,15 +471,7 @@
                 </div>
             </div>
 
-            <div class="section">
-                <h2>
-                    Rutas
-                    <span class="badge" id="rutasCount">0</span>
-                </h2>
-                <div id="rutasContent">
-                    <div class="loading">Cargando rutas...</div>
-                </div>
-            </div>
+
         </div>
 
         <div class="trip-section">
@@ -575,21 +569,7 @@
                 .join('&');
         };
 
-        const VOWELS = 'AEIOU';
 
-        const abbrCandidates = (text, length = 3) => {
-            if (!text) return [];
-            const chars = (text.toUpperCase().match(/[A-Z']/g) || []);
-            if (!chars.length) return [];
-            const simple = chars.join('').slice(0, length);
-            const consonants = chars.filter(c => !VOWELS.includes(c)).join('').slice(0, length);
-            const opts = [];
-            [consonants, simple].forEach(c => {
-                const trimmed = c.slice(0, length);
-                if (trimmed && !opts.includes(trimmed)) opts.push(trimmed);
-            });
-            return opts;
-        };
 
         const uniqueValues = (arr) => {
             const seen = new Set();
@@ -601,53 +581,33 @@
             });
         };
 
-        const buildRouteCode = (clienteId, ciudad) => {
-            if (!ciudad) return '';
-            const cityAbbr = abbrCandidates(ciudad)[0];
-            if (!cityAbbr) return '';
-            let clientAbbr = '';
-            if (clienteId) {
-                const cli = clientesData.find(c => `${c.id}` === `${clienteId}`);
-                const nombre = cli?.nombre || `${clienteId}`;
-                clientAbbr = abbrCandidates(nombre)[0] || '';
-            }
-            const prefix = clientAbbr ? `${clientAbbr}-${cityAbbr}` : cityAbbr;
-            return `${prefix}-VAR`.toUpperCase();
-        };
 
-        const normalizeRouteCode = (code) => {
-            if (!code) return '';
-            return code.toUpperCase().trim();
-        };
-
-        function sugerirRouteCode() {
-            const clienteId = document.getElementById('filterCliente').value;
-            const ciudad = document.getElementById('filterCiudad').value.trim();
-            const input = document.getElementById('filterRouteCode');
-            const autoCode = buildRouteCode(clienteId, ciudad);
-            input.placeholder = autoCode || 'Ej: CHL-YUM-VAR';
-            if (!input.value || input.dataset.auto === 'true') {
-                input.value = autoCode;
-                input.dataset.auto = 'true';
-            }
-        }
 
         async function inicializar() {
-            document.getElementById('filterCliente').addEventListener('change', sugerirRouteCode);
-            document.getElementById('filterCiudad').addEventListener('input', sugerirRouteCode);
-            document.getElementById('filterRouteCode').addEventListener('input', () => {
-                document.getElementById('filterRouteCode').dataset.auto = 'false';
+            // Event listeners para filtros principales
+            document.getElementById('filterCliente').addEventListener('change', async (e) => {
+                const cid = e.target.value;
+                await cargarSedes(cid);
+                await cargarDatos(); // Recargar datos al cambiar cliente
             });
-            document.getElementById('filterViaCode').addEventListener('input', () => {
-                const viaInput = document.getElementById('filterViaCode');
-                viaInput.value = viaInput.value.toUpperCase();
-            });
-            await cargarClientes();
-            sugerirRouteCode();
-            inicializarTripSelectors();
-            document.getElementById('tripFecha').valueAsDate = new Date(); // Fecha por defecto hoy
 
-            // Auto-load data on start as per user request ("Antes... traia las rutas")
+            document.getElementById('filterSede').addEventListener('change', () => {
+                cargarDatos();
+            });
+
+            document.getElementById('filterCentroCosto').addEventListener('change', () => {
+                cargarDatos();
+            });
+
+            // Ciudad ya no tiene sugeridor de rutas, solo recarga datos manual o debounced?
+            // El usuario dijo "la busqueda por ciudad dejalo". Lo ideal es no recargar en cada tecla.
+            // Dejamos que use el boton "Buscar" para texto libre, o un debounce.
+            // Por consistencia con lo anterior, solia tener un listener. Lo quitamos para evitar spam.
+
+            await cargarClientes();
+            inicializarTripSelectors();
+            document.getElementById('tripFecha').valueAsDate = new Date();
+
             await cargarDatos();
         }
 
@@ -796,48 +756,106 @@
             actualizarTripSummary();
         }
 
+        let sedesData = [];
+
         async function cargarDatos() {
             setLoading(true);
             const clienteId = document.getElementById('filterCliente').value;
             const ciudad = document.getElementById('filterCiudad').value.trim();
+            const sedeId = document.getElementById('filterSede').value;
+            const centroCosto = document.getElementById('filterCentroCosto').value;
             const rol = document.getElementById('filterRol').value;
             soloActivos = document.getElementById('filterSoloActivos').checked;
-            const routeCodeInput = document.getElementById('filterRouteCode');
-            const viaCodeInput = document.getElementById('filterViaCode');
-            const autoRouteCode = buildRouteCode(clienteId, ciudad);
-            const routeCode = normalizeRouteCode(routeCodeInput.value || autoRouteCode || '');
-            if (!routeCodeInput.value && autoRouteCode) {
-                routeCodeInput.value = autoRouteCode;
-                routeCodeInput.dataset.auto = 'true';
-            }
-            const viaCode = viaCodeInput.value.trim().toUpperCase();
-
-            tripState.clienteId = clienteId;
-            tripState.ciudad = ciudad;
-            tripState.rutaCodigo = routeCode;
-            tripState.viaCode = viaCode;
-            syncTripInputsFromState();
 
             try {
+                // 1. Cargar Vehiculos y Personal en paralelo
                 await Promise.all([
-                    cargarVehiculos({ clienteId, ciudad }),
-                    cargarPersonal({ clienteId, ciudad, rol, soloActivos }),
-                    cargarRutas({ clienteId, ciudad, routeCode, viaCode }),
-                    cargarRutasTodas(),
+                    cargarVehiculos({ clienteId, ciudad, sedeId, centroCosto }),
+                    cargarPersonal({ clienteId, ciudad, sedeId, rol, soloActivos }),
                 ]);
+
+                // 2. Poblar Centros de Costo dinamicamente basados en los vehiculos cargados
+                // Solo si NO se esta filtrando ya por uno (para no resetear el filtro)
+                if (!centroCosto) {
+                    poblarCentrosCosto();
+                }
+
                 actualizarEstadisticas();
-                actualizarTripOptions();
             } finally {
                 setLoading(false);
             }
         }
 
-        async function cargarVehiculos({ clienteId = '', ciudad = '' } = {}) {
+        async function cargarSedes(clienteId) {
+            const select = document.getElementById('filterSede');
+            select.innerHTML = '<option value="">Todas las sedes</option>';
+            if (!clienteId) {
+                sedesData = [];
+                return;
+            }
             try {
-                const url = `${API_BASE}/vehiculos${buildQuery({
+                const response = await fetch(`${API_BASE}/sedes?cliente_id=${clienteId}`);
+                if (response.ok) {
+                    sedesData = await response.json();
+                    sedesData.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.id;
+                        opt.textContent = s.nombre + (s.ciudad ? ` (${s.ciudad})` : '');
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (e) {
+                console.error("Error cargando sedes", e);
+            }
+        }
+
+        function poblarCentrosCosto() {
+            const select = document.getElementById('filterCentroCosto');
+            const currentVal = select.value;
+            // Guardar seleccion actual si existe
+
+            const centros = new Set();
+            vehiculosData.forEach(v => {
+                const cc = v.datos_adicionales?.costCenter;
+                if (cc) {
+                    // Puede ser objeto o string
+                    const val = typeof cc === 'string' ? cc : (cc.name || cc.code);
+                    if (val) centros.add(val);
+                }
+                // Tambien revisar "Centro de Costo" en datos_adicionales planos
+                if (v.datos_adicionales?.centro_costo) centros.add(v.datos_adicionales.centro_costo);
+            });
+
+            // Limpiar pero mantener opcion 'Todos'
+            select.innerHTML = '<option value="">Todos</option>';
+
+            Array.from(centros).sort().forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c;
+                opt.textContent = c;
+                select.appendChild(opt);
+            });
+
+            if (currentVal && centros.has(currentVal)) {
+                select.value = currentVal;
+            }
+        }
+
+        function actualizarFiltrosDependientes() {
+            // Si cambia la Sede, podriamos querer refiltrar
+            // Dejamos que el usuario pulse 'Buscar' o lo hacemos automatico?
+            // El usuario suele pulsar Buscar.
+        }
+
+        async function cargarVehiculos({ clienteId = '', ciudad = '', sedeId = '', centroCosto = '' } = {}) {
+            try {
+                const query = buildQuery({
                     cliente_id: clienteId,
                     ciudad: ciudad || undefined,
-                })}`;
+                    sede_id: sedeId || undefined,
+                    centro_costo: centroCosto || undefined
+                });
+                const url = `${API_BASE}/vehiculos${query}`;
                 const response = await fetch(url);
                 if (!response.ok) throw new Error('Error al cargar vehiculos');
 
@@ -858,22 +876,27 @@
                                     <th>Placa</th>
                                     <th>Tipo</th>
                                     <th>Ciudad</th>
+                                    <th>Centro Costo</th>
                                     <th>Estado</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${vehiculosData.map(v => `
+                                ${vehiculosData.map(v => {
+                    const ccObj = v.datos_adicionales?.costCenter;
+                    const cc = typeof ccObj === 'string' ? ccObj : (ccObj?.name || 'N/A');
+                    return `
                                     <tr>
                                         <td><strong>${v.placa || 'N/A'}</strong></td>
                                         <td>${v.datos_adicionales?.typeName || v.tipo || 'N/A'}</td>
                                         <td>${v.ubicacion_ciudad || 'No especificada'}</td>
+                                        <td><small>${cc}</small></td>
                                         <td>
                                             <span class="status ${v.activo ? 'active' : 'inactive'}">
                                                 ${v.activo ? 'Activo' : 'Inactivo'}
                                             </span>
                                         </td>
                                     </tr>
-                                `).join('')}
+                                `}).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -888,18 +911,20 @@
             }
         }
 
-        async function cargarPersonal({ clienteId = '', ciudad = '', rol = '', soloActivos = false } = {}) {
+        async function cargarPersonal({ clienteId = '', ciudad = '', sedeId = '', rol = '', soloActivos = false } = {}) {
             try {
-                const url = `${API_BASE}/personal${buildQuery({
+                const query = buildQuery({
                     cliente_id: clienteId,
                     ciudad: ciudad || undefined,
+                    sede_id: sedeId || undefined,
                     rol: rol || undefined,
-                })}`;
+                });
+                const url = `${API_BASE}/personal${query}`;
                 const response = await fetch(url);
                 if (!response.ok) throw new Error('Error al cargar personal');
 
                 personalData = await response.json();
-                // Filtro defensivo en front por si la API devuelve mas datos de los solicitados
+
                 personalData = personalData.filter(p => {
                     const activoOk = !soloActivos || p.activo !== false;
                     const rolOk = !rol || (p.rol || '').toLowerCase().includes(rol.toLowerCase());
@@ -956,105 +981,6 @@
                 document.getElementById('personalCount').textContent = '0';
                 document.getElementById('personalContent').innerHTML =
                     `<div class="error">Error: ${error.message}</div>`;
-            }
-        }
-
-        const RUTAS_ENDPOINT = '/rutas_v2';
-
-        async function cargarRutas({ clienteId = '', ciudad = '', routeCode = '', viaCode = '' } = {}) {
-            try {
-                const url = `${API_BASE}${RUTAS_ENDPOINT}${buildQuery({
-                    cliente_id: routeCode ? undefined : clienteId,
-                    ciudad: routeCode ? undefined : (ciudad || undefined),
-                    route_code: routeCode || undefined,
-                    via_code: viaCode || undefined,
-                })}`;
-                const response = await fetch(url);
-                if (!response.ok) throw new Error('Error al cargar rutas');
-
-                rutasData = await response.json();
-                if (!routeCode) {
-                    rutasData = rutasData.filter(r => {
-                        const ciudadOk = !ciudad || tripCityMatchFn(ciudad)(r.origen) || tripCityMatchFn(ciudad)(r.destino);
-                        const clienteOk = !clienteId || (`${r.cliente_id}` === `${clienteId}`);
-                        return ciudadOk && clienteOk;
-                    });
-                }
-                document.getElementById('rutasCount').textContent = rutasData.length;
-
-                const content = document.getElementById('rutasContent');
-                if (!rutasData.length) {
-                    content.innerHTML = '<div class="empty">No se encontraron rutas</div>';
-                    return;
-                }
-
-                const html = `
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Codigo</th>
-                            <th>Nombre</th>
-                            <th>Origen</th>
-                            <th>Destino</th>
-                            <th>Vias</th>
-                            <th>Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${rutasData.map(r => {
-                    const viasDetalle = (r.vias_detalle || []).map(v => {
-                        const code = v.code || '';
-                        const name = v.name || '';
-                        if (!code && !name) return '';
-                        return `<span class="via-pill"><span class="via-code">${code}</span><span class="via-name">${name}</span></span>`;
-                    }).filter(Boolean);
-                    const viasFallback = (r.vias && r.vias.length)
-                        ? r.vias.map(v => `<span class="via-pill"><span class="via-code">${v}</span></span>`)
-                        : [];
-                    if (!viasDetalle.length && !viasFallback.length) {
-                        viasFallback.push(`<span class="via-pill"><span class="via-name">${r.via_codigo || r.datos_adicionales?.viaCode || r.datos_adicionales?.via?.name || 'N/D'}</span></span>`);
-                    }
-                    const viasHtml = `<div class="vias-chips">${(viasDetalle.length ? viasDetalle : viasFallback).join('')}</div>`;
-                    return `
-                                <tr>
-                                    <td><strong>${r.codigo || 'SIN-COD'}</strong></td>
-                                    <td>${r.nombre || 'Sin nombre'}</td>
-                                    <td>${r.origen || 'N/D'}</td>
-                                    <td>${r.destino || 'N/D'}</td>
-                                    <td>${viasHtml}</td>
-                                    <td>
-                                        <span class="status ${r.activa === false ? 'inactive' : 'active'}">
-                                            ${r.activa === false ? 'Inactiva' : 'Activa'}
-                                        </span>
-                                    </td>
-                                </tr>
-                            `;
-                }).join('')}
-                    </tbody>
-                </table>
-            </div>
-        `;
-
-                content.innerHTML = html;
-            } catch (error) {
-                rutasData = [];
-                document.getElementById('rutasCount').textContent = '0';
-                document.getElementById('rutasContent').innerHTML =
-                    `<div class="error">Error: ${error.message}</div>`;
-            }
-        }
-
-
-        async function cargarRutasTodas() {
-            try {
-                const response = await fetch(`${API_BASE}${RUTAS_ENDPOINT}`);
-                if (!response.ok) throw new Error('Error al cargar rutas completas');
-                const data = await response.json();
-                rutasDataFull = data;
-            } catch (error) {
-                console.error('No se pudieron cargar todas las rutas:', error);
-                if (!rutasDataFull.length) rutasDataFull = rutasData;
             }
         }
 
@@ -1397,13 +1323,11 @@
         async function limpiarFiltros() {
             document.getElementById('filterCliente').value = '';
             document.getElementById('filterCiudad').value = '';
+            document.getElementById('filterSede').innerHTML = '<option value="">Todas las sedes</option>';
+            document.getElementById('filterCentroCosto').innerHTML = '<option value="">Todos</option>';
             document.getElementById('filterRol').value = '';
             document.getElementById('filterSoloActivos').checked = true;
-            document.getElementById('filterRouteCode').value = '';
-            document.getElementById('filterRouteCode').dataset.auto = 'false';
-            document.getElementById('filterViaCode').value = '';
 
-            sugerirRouteCode();
             tripState.clienteId = '';
             tripState.ciudad = '';
             tripState.vehiculoId = '';
