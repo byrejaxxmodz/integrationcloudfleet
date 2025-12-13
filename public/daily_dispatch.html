@@ -397,40 +397,98 @@
         }
 
         // ---- AUTO QUOTA LOGIC ----
+        // ---- AUTO QUOTA LOGIC ----
+
+        // Tabla de Cupos: [Domingo, Lunes, Martes, Miercoles, Jueves, Viernes, Sabado]
+        const QUOTA_TABLE = {
+            "CCM LINDE": {
+                "BARRANQUILLA": [0, 2, 2, 2, 2, 2, 2],
+                "BOGOTA": [3, 7, 7, 7, 7, 7, 7],
+                "CARTAGENA": [0, 2, 2, 2, 2, 2, 2],
+                "IBAGUE": [0, 2, 2, 2, 2, 2, 2],
+                "MEDELLIN": [1, 7, 7, 7, 7, 7, 7],
+                "PEREIRA": [0, 4, 4, 4, 4, 4, 4],
+                "POPAYAN": [0, 1, 0, 0, 0, 0, 0], // Lunes 1, otros 0 (según regla visual)
+                "SOGAMOSO": [0, 2, 0, 0, 0, 0, 0], // Lunes 2, otros 0
+                "TOCANCIPA": [0, 5, 5, 5, 5, 5, 5],
+                "YUMBO": [0, 5, 5, 5, 5, 5, 5]
+            },
+            "CCM CHILCO": {
+                "CAZUCA": [2, 2, 2, 2, 2, 2, 2],
+                "FLORENCIA": [2, 2, 2, 2, 2, 2, 2],
+                "GIRARDOT": [1, 1, 1, 1, 1, 1, 1],
+                "HISPANIA": [1, 1, 1, 1, 1, 1, 1],
+                "MADRID": [1, 1, 1, 1, 1, 1, 1],
+                "MARINILLA": [2, 2, 2, 2, 2, 2, 2],
+                "NEIVA": [3, 3, 3, 3, 3, 3, 3],
+                "YUMBO": [1, 1, 1, 1, 1, 1, 1]
+            }
+        };
+
+        // Alias for PRAXAIR -> LINDE
+        QUOTA_TABLE["CCM PRAXAIR"] = QUOTA_TABLE["CCM LINDE"];
+
+        function normalizeCity(name) {
+            if (!name) return "";
+            return name.toUpperCase()
+                .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
+                .trim();
+        }
+
         async function updateQuota() {
             const clienteSelect = document.getElementById('selCliente');
             const clienteName = clienteSelect.options[clienteSelect.selectedIndex]?.text || "";
 
             const sedeSelect = document.getElementById('selSede');
-            const sedeName = sedeSelect.options[sedeSelect.selectedIndex]?.text || "";
+            // Try to get City from dataset first, then text
+            const selectedOpt = sedeSelect.options[sedeSelect.selectedIndex];
+            const sedeCity = selectedOpt?.dataset.ciudad || selectedOpt?.textContent || "";
 
             const fechaVal = document.getElementById('selFecha').value;
             const quotaInput = document.getElementById('selQuota');
 
-            if (clienteName && sedeName && fechaVal) {
-                // If sede is "Todas las Sedes" (value=""), do nothing
-                if (!sedeSelect.value) return;
+            if (clienteName && sedeCity && fechaVal) {
+                // Determine Day of Week (0=Sun, 6=Sat)
+                // Note: input type="date" value is YYYY-MM-DD. 
+                // Creating Date(YYYY-MM-DD) in JS calculates as UTC usually, but we need local day or consistent day.
+                // Best to split and create date info.
+                const sections = fechaVal.split('-');
+                // new Date(y, m-1, d)
+                const dateObj = new Date(parseInt(sections[0]), parseInt(sections[1]) - 1, parseInt(sections[2]));
+                const dayIndex = dateObj.getDay();
 
-                try {
-                    const params = new URLSearchParams({
-                        cliente: clienteName,
-                        sede: sedeName,
-                        fecha: fechaVal
-                    });
-                    const res = await fetch(`${API_BASE}/api/quota?${params}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.quota > 0) {
-                            quotaInput.value = data.quota;
-                            // Visual feedback
-                            quotaInput.classList.add("bg-indigo-900", "text-indigo-100", "border-indigo-500");
-                            setTimeout(() => {
-                                quotaInput.classList.remove("bg-indigo-900", "text-indigo-100", "border-indigo-500");
-                            }, 800);
-                        }
+                // Lookup
+                let foundQuota = null;
+
+                // 1. Find Client Table
+                // Check inclusion because clientName might be "CCM PRAXAIR (123)" or similar? 
+                // No, usually exact match in this system.
+                // But let's check keys.
+                let targetParams = null;
+                for (const key of Object.keys(QUOTA_TABLE)) {
+                    if (clienteName.includes(key)) {
+                        targetParams = QUOTA_TABLE[key];
+                        break;
                     }
-                } catch (e) {
-                    console.error("Error fetching quota:", e);
+                }
+
+                if (targetParams) {
+                    const normCity = normalizeCity(sedeCity);
+                    // Match city in table keys
+                    const cityKey = Object.keys(targetParams).find(k => normalizeCity(k) === normCity);
+
+                    if (cityKey) {
+                        foundQuota = targetParams[cityKey][dayIndex];
+                    }
+                }
+
+                if (foundQuota !== null) {
+                    quotaInput.value = foundQuota;
+                    // Visual feedback
+                    quotaInput.classList.add("bg-blue-600", "text-white", "font-bold");
+                    setTimeout(() => {
+                        quotaInput.classList.remove("bg-blue-600", "text-white", "font-bold");
+                    }, 800);
                 }
             }
         }
