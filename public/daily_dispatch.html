@@ -501,6 +501,10 @@
 
                 if (foundQuota !== null) {
                     quotaInput.value = foundQuota;
+
+                    // Debug info for user hover
+                    quotaInput.title = `Auto-Quota: ${foundQuota} (Day ${dayIndex}, Key ${cityKey || '?'})`;
+
                     // Visual feedback
                     quotaInput.classList.remove("bg-blue-600", "text-white", "font-bold");
                     // Reflow 
