@@ -447,6 +447,9 @@
             const fechaVal = document.getElementById('selFecha').value;
             const quotaInput = document.getElementById('selQuota');
 
+            // Log for debugging
+            console.log(`[AutoQuota] Check: Client="${clienteName}", City="${sedeCity}", Date="${fechaVal}"`);
+
             if (clienteName && sedeCity && fechaVal) {
                 // Determine Day of Week (0=Sun, 6=Sat)
                 // Note: input type="date" value is YYYY-MM-DD. 
@@ -456,6 +459,7 @@
                 // new Date(y, m-1, d)
                 const dateObj = new Date(parseInt(sections[0]), parseInt(sections[1]) - 1, parseInt(sections[2]));
                 const dayIndex = dateObj.getDay();
+                console.log(`[AutoQuota] DayIndex=${dayIndex} (0=Sun)`);
 
                 // Lookup
                 let foundQuota = null;
@@ -468,23 +472,39 @@
                 for (const key of Object.keys(QUOTA_TABLE)) {
                     if (clienteName.includes(key)) {
                         targetParams = QUOTA_TABLE[key];
+                        console.log(`[AutoQuota] Matched Table Key: ${key}`);
                         break;
                     }
                 }
 
                 if (targetParams) {
                     const normCity = normalizeCity(sedeCity);
+
                     // Match city in table keys
-                    const cityKey = Object.keys(targetParams).find(k => normalizeCity(k) === normCity);
+                    // FUZZY MATCH: Check if key is IN normalized city, or normalized city is IN key
+                    // e.g. "BOGOTA" in "BOGOTA D.C." -> VALID
+                    const cityKey = Object.keys(targetParams).find(k => {
+                        const kNorm = normalizeCity(k);
+                        // Strict check first, then fuzzy
+                        return normCity === kNorm || normCity.includes(kNorm) || kNorm.includes(normCity);
+                    });
 
                     if (cityKey) {
                         foundQuota = targetParams[cityKey][dayIndex];
+                        console.log(`[AutoQuota] Found Quota for ${cityKey}: ${foundQuota}`);
+                    } else {
+                        console.warn(`[AutoQuota] City "${normCity}" not found in table for this client.`);
                     }
+                } else {
+                    console.warn(`[AutoQuota] Client table not found for "${clienteName}"`);
                 }
 
                 if (foundQuota !== null) {
                     quotaInput.value = foundQuota;
                     // Visual feedback
+                    quotaInput.classList.remove("bg-blue-600", "text-white", "font-bold");
+                    // Reflow 
+                    void quotaInput.offsetWidth;
                     quotaInput.classList.add("bg-blue-600", "text-white", "font-bold");
                     setTimeout(() => {
                         quotaInput.classList.remove("bg-blue-600", "text-white", "font-bold");
