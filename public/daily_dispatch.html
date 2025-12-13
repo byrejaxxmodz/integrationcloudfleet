@@ -311,15 +311,18 @@
                             class="text-slate-400 uppercase text-xs font-bold tracking-wider mb-4 border-l-4 border-slate-600 pl-3">
                             Recursos Disponibles (Stand-by)
                         </h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div>
                                 <h4 class="text-slate-500 text-xs mb-2">Vehículos Disponibles</h4>
-                                <div id="stbyVehicles"
-                                    class="grid grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto"></div>
+                                <div id="stbyVehicles" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto"></div>
                             </div>
                             <div>
                                 <h4 class="text-slate-500 text-xs mb-2">Conductores Disponibles</h4>
                                 <div id="stbyDrivers" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto"></div>
+                            </div>
+                            <div>
+                                <h4 class="text-slate-500 text-xs mb-2">Auxiliares Disponibles</h4>
+                                <div id="stbyAssistants" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto"></div>
                             </div>
                         </div>
                     </div>
@@ -1023,7 +1026,8 @@
 
         function renderStandby(standby) {
             const container = document.getElementById('standbyContainer');
-            if (!standby || (!standby.vehicles.length && !standby.drivers.length)) {
+            // Check all 3 lists
+            if (!standby || (!standby.vehicles.length && !standby.drivers.length && (!standby.assistants || !standby.assistants.length))) {
                 container.classList.add('hidden');
                 return;
             }
@@ -1045,6 +1049,16 @@
                     <span class="text-slate-300"><i class="fas fa-user text-slate-500 mr-1"></i> ${c.nombre}</span>
                  </div>`
             ).join('');
+
+            // Render Unused Assistants (if available)
+            const aList = document.getElementById('stbyAssistants');
+            if (aList && standby.assistants) {
+                aList.innerHTML = standby.assistants.map(a =>
+                    `<div class="p-2 bg-slate-800/50 rounded border border-slate-700 text-xs flex justify-between items-center">
+                        <span class="text-slate-300"><i class="fas fa-user-tag text-slate-500 mr-1"></i> ${a.nombre}</span>
+                     </div>`
+                ).join('');
+            }
         }
 
         init();
