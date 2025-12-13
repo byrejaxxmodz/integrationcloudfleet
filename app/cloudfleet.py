@@ -5,6 +5,7 @@ Incluye manejo basico de 404 y 429 para no romper la UI.
 """
 import os
 import time
+import json
 import logging
 from typing import Any
 from datetime import datetime, timedelta
@@ -45,6 +46,43 @@ MAX_PAGES = int(os.getenv("CLOUDFLEET_MAX_PAGES", "0"))
 MAX_TOTAL_SECONDS = float(os.getenv("CLOUDFLEET_MAX_TOTAL_SECONDS", "0"))
 # Numero maximo de reintentos ante 429
 MAX_RETRIES_429 = int(os.getenv("CLOUDFLEET_MAX_RETRIES_429", "10"))
+
+# === LOCAL CACHE CONFIG ===
+CACHE_DIR = ".cache"
+CACHE_TTL = 86400  # 24 Hours
+
+def _get_cache_path(name: str) -> str:
+    if not os.path.exists(CACHE_DIR):
+        os.makedirs(CACHE_DIR, exist_ok=True)
+    return os.path.join(CACHE_DIR, f"{name}.json")
+
+def _load_cache(name: str) -> Any | None:
+    try:
+        path = _get_cache_path(name)
+        if not os.path.exists(path):
+            return None
+        
+        # Check TTL
+        mtime = os.path.getmtime(path)
+        if (time.time() - mtime) > CACHE_TTL:
+            logger.info(f"Cache expired for {name}")
+            return None
+            
+        with open(path, 'r', encoding='utf-8') as f:
+            logger.info(f"Loading {name} from cache...")
+            return json.load(f)
+    except Exception as e:
+        logger.warning(f"Error loading cache {name}: {e}")
+        return None
+
+def _save_cache(name: str, data: Any):
+    try:
+        path = _get_cache_path(name)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+        logger.info(f"Saved cache for {name}")
+    except Exception as e:
+        logger.warning(f"Error saving cache {name}: {e}")
 
 
 def _check_config():
@@ -157,17 +195,38 @@ def get_camiones(code: str | None = None, customer_id: str | None = None, max_pa
     """
     path = "vehicles/"
     params = []
-    if code:
-        params.append(f"code={code}")
-    if customer_id:
-        params.append(f"customerId={customer_id}")
+    # CACHE STRATEGY:
+    # If fetching specific vehicle by code, bypass cache (or simpler to just fetch).
+    # If fetching list (with or without customer_id), use LOCAL CACHE "vehicles_all".
     
-    if params:
-        path += "?" + "&".join(params)
+    if code:
+        # Direct fetch, no cache specific
+        params.append(f"code={code}")
+        if customer_id:
+            params.append(f"customerId={customer_id}")
+        if params:
+            path += "?" + "&".join(params)
+        return _get_paginated(path, max_pages=max_pages)
+
+    # Fetching list
+    all_vehicles = _load_cache("vehicles_all")
+    if all_vehicles is None:
+        logger.info("Fetching ALL vehicles from CloudFleet for cache (this may take a while)...")
+        # Fetch EVERYTHING (no max_pages strictly, or very high)
+        all_vehicles = _get_paginated("vehicles/", max_pages=None)
+        _save_cache("vehicles_all", all_vehicles)
+    
+    # In-memory Filter
+    filtered = all_vehicles
+    
+    if customer_id:
+        target_cid = str(customer_id)
+        filtered = [
+            v for v in filtered 
+            if str(v.get("customerId", "") or v.get("cliente_id", "") or "") == target_cid
+        ]
         
-    # Si buscamos por codigo especifico, retornamos todo (no deberia ser mucho).
-    # Si es listado general, respetamos max_pages.
-    return _get_paginated(path, max_pages=max_pages if not code else None)
+    return filtered
 
 
 def get_camion_por_codigo(code: str) -> dict[str, Any]:
@@ -339,7 +398,16 @@ def get_personas(max_pages: int | None = None) -> list[dict[str, Any]]:
     Obtiene listado completo de personas con paginacion automatica.
     Endpoint: /people/
     """
-    return _get_paginated("people/", max_pages=max_pages)
+    # CACHE STRATEGY:
+    # Use LOCAL CACHE "people_all".
+    
+    all_people = _load_cache("people_all")
+    if all_people is None:
+        logger.info("Fetching ALL people from CloudFleet for cache (this may take a while)...")
+        all_people = _get_paginated("people/", max_pages=None)
+        _save_cache("people_all", all_people)
+        
+    return all_people
 
 
 def get_persona(person_id: str) -> dict[str, Any]:
