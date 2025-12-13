@@ -93,6 +93,9 @@ def debug_env():
     }
 
 
+
+
+    
 # ============= MODELOS PYDANTIC =============
 
 class Cliente(BaseModel):
@@ -928,6 +931,10 @@ def obtener_cliente_completo(cliente_id: str):
 
 # ============= ENDPOINTS DE SEDES =============
 
+    except Exception as e:
+        logger.error(f"Error listar sedes: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al obtener sedes: {str(e)}")
+
 @app.get("/sedes", response_model=List[Sede])
 def listar_sedes(cliente_id: Optional[str] = Query(None, description="ID del cliente para filtrar")):
     """
@@ -958,7 +965,7 @@ def listar_sedes(cliente_id: Optional[str] = Query(None, description="ID del cli
             try:
                 # OPTIMIZACION: Filtrar por cliente_id si existe
                 vehiculos = get_camiones(customer_id=cliente_id, max_pages=10) or []
-            except Exception:
+            except Exception as e:
                 # Fallback silencioso
                 vehiculos = []
             ciudades_vistas = set()
@@ -1004,7 +1011,6 @@ def listar_sedes(cliente_id: Optional[str] = Query(None, description="ID del cli
                         ))
                         idx += 1
 
-        # 3. ENFORCER: Garantizar sedes esperadas del Excel (Quota Rules)
         if cliente_id:
             try:
                 # Obtener nombre de cliente para buscar en matriz
@@ -1014,12 +1020,25 @@ def listar_sedes(cliente_id: Optional[str] = Query(None, description="ID del cli
                     c_name = sedes_data[0].get("customer", {}).get("name") or ""
                 
                 # Opcion B: Si no, intentar consulta rapida
-                if not c_name and get_cliente:
-                     try:
-                        cd = get_cliente(cliente_id)
-                        c_name = cd.get("name")
-                     except:
-                        pass
+                if not c_name:
+                    # 1. Buscar en lista de clientes (Cached, rapido)
+                    if get_clientes:
+                        try:
+                            all_clients = get_clientes() or []
+                            for c in all_clients:
+                                if str(c.get("id")) == str(cliente_id):
+                                    c_name = c.get("name") or c.get("nombre")
+                                    break
+                        except Exception:
+                           pass
+
+                    # 2. Si falla, intentar fetch directo (API call)
+                    if not c_name and get_cliente:
+                         try:
+                            cd = get_cliente(cliente_id)
+                            c_name = cd.get("name")
+                         except Exception:
+                            pass
                 
                 expected = get_expected_sedes(c_name)
                 
