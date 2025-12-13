@@ -61,8 +61,14 @@ def get_quota_for_date(cliente_nombre: str, sede_nombre: str, fecha_str: str) ->
         c_key = cliente_nombre.upper().strip()
         s_key = sede_nombre.upper().strip()
         
+        print(f"DEBUG_QUOTA: Searching for Client='{c_key}', Sede='{s_key}', Day={day_of_week}")
+
         # Busqueda exacta primero
         rule = QUOTA_MATRIX.get((c_key, s_key))
+        if rule:
+             print(f"DEBUG_QUOTA: Exact match found: {rule}")
+        else:
+             print(f"DEBUG_QUOTA: No exact match. Trying fuzzy...")
         
         # Búsqueda parcial si no hay exacta (ej: "CCM LINDE SAS" -> "CCM LINDE")
         if not rule:
