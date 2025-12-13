@@ -1480,7 +1480,26 @@ def listar_vehiculos(
             
             # Filtrar por ciudad si se especifica
             if ciudad:
-                if not ubicacion or ciudad_norm not in ubicacion_norm:
+                CITY_ALIASES = {
+                    "yumbo": ["cali"],
+                    "cali": ["yumbo"],
+                    "bogota": ["bogota d.c."]
+                }
+                
+                valid_cities = {ciudad_norm}
+                # Add aliases
+                if ciudad_norm in CITY_ALIASES:
+                    for alias in CITY_ALIASES[ciudad_norm]:
+                        valid_cities.add(alias)
+                
+                # Fuzzy Check
+                match_city = False
+                for target_city in valid_cities:
+                    if target_city in ubicacion_norm:
+                        match_city = True
+                        break
+                
+                if not ubicacion or not match_city:
                     continue
 
             # Filtrar por cliente usando las ciudades de sus sedes
