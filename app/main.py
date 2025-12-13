@@ -247,14 +247,38 @@ def _ciudades_por_cliente(cliente_id: Optional[str]) -> set[str]:
         return set()
 
     ciudades: set[str] = set()
-    for sede in sedes:
-        ciudad_val = sede.get("city", sede.get("ciudad"))
-        if isinstance(ciudad_val, dict):
-            ciudad = ciudad_val.get("name", "")
-        else:
-            ciudad = ciudad_val or ""
-        if ciudad:
-            ciudades.add(str(ciudad).lower())
+    if sedes:
+        for sede in sedes:
+            ciudad_val = sede.get("city", sede.get("ciudad"))
+            if isinstance(ciudad_val, dict):
+                ciudad = ciudad_val.get("name", "")
+            else:
+                ciudad = ciudad_val or ""
+            if ciudad:
+                ciudades.add(str(ciudad).lower())
+    
+    # Adicion: Buscar en Quota Rules (Excel) usando resolucion robusta de nombre
+    c_name = ""
+    try:
+        # 1. Usar listar_clientes (logic robusta)
+        all_c = listar_clientes() or []
+        for c in all_c:
+            if str(c.id) == str(cliente_id):
+                c_name = (c.nombre or "").upper()
+                break
+        
+        # 2. Direct fetch
+        if not c_name and get_cliente:
+             c_d = get_cliente(cliente_id)
+             c_name = (c_d.get("name") or "").upper()
+
+        if c_name:
+            expected = get_expected_sedes(c_name)
+            for city in expected:
+                ciudades.add(str(city).lower())
+    except Exception as e:
+        logger.warning(f"Error resolving expected cities for {cliente_id}: {e}")
+
     return ciudades
 
 
@@ -1422,24 +1446,29 @@ def listar_vehiculos(
         if cliente_id:
             target_ids.add(str(cliente_id))
             
-            # Buscar nombre
+            # Buscar nombre ROBUSTAMENTE (Igual que en listar_sedes)
             try:
-                c_data = get_cliente(cliente_id) if get_cliente else {}
-                c_name = (c_data.get("name") or "").upper()
+                # 1. Usar listar_clientes (que tiene logica fallback y funciona)
+                all_c = listar_clientes() or []
+                for c in all_c:
+                    # c es Cliente (Pydantic)
+                    if str(c.id) == str(cliente_id):
+                        c_name = (c.nombre or "").upper()
+                        break
+                
+                # 2. Si falla, API directa
+                if not c_name and get_cliente:
+                    c_data = get_cliente(cliente_id)
+                    c_name = (c_data.get("name") or "").upper()
                 
                 if "LINDE" in c_name or "PRAXAIR" in c_name:
                     # Es del grupo. Buscar el ID del otro.
-                    # Buscamos todos los clientes y filtramos.
-                    # OJO: Esto puede ser lento si hay muchos clientes. 
-                    # Asumimos pococos clientes o cache.
-                    all_customers = get_clientes() if get_clientes else []
+                    all_customers = listar_clientes() or []
                     for c in all_customers:
-                        cn = (c.get("name") or "").upper()
-                        cid = str(c.get("id"))
+                        cn = (c.nombre or "").upper()
+                        cid = str(c.id)
                         if cid == str(cliente_id): continue
                         
-                        # Si soy Linde, busco Praxair. Si soy Praxair, busco Linde.
-                        # O simplemente traigo AMBOS si detecto keywords.
                         if "LINDE" in c_name:
                             if "PRAXAIR" in cn: target_ids.add(cid)
                         elif "PRAXAIR" in c_name:
@@ -1460,6 +1489,20 @@ def listar_vehiculos(
                     raw_vehicles.extend(vf)
                 except Exception:
                     pass
+            
+            # FALLBACK CRITICO: Muchos vehiculos no tienen customerId asignado en la API,
+            # pero tienen el nombre del cliente en el Centro de Costo (ej: CCM PRAXAIR).
+            # Si no traemos vehiculos generales, nunca los encontraremos.
+            # Lo hacemos si la lista esta vacia O si es un cliente 'complejo' como Linde/Praxair.
+            if len(raw_vehicles) == 0 or ("LINDE" in c_name or "PRAXAIR" in c_name):
+                 try:
+                     # Traer globales (paginados) para intentar matching por CostCenter
+                     # 5 paginas ~ 250 vehiculos, suficiente para flotas medianas
+                     logger.info(f"DEBUG: Fetching global vehicles for CostCenter fallback (c_name={c_name})")
+                     vf_global = get_camiones(customer_id=None, max_pages=5) or []
+                     raw_vehicles.extend(vf_global)
+                 except Exception as e:
+                     logger.warning(f"Error fetching global fallback: {e}")
         
         # Deduplicate by ID
         vehiculos_data = []
@@ -1479,8 +1522,11 @@ def listar_vehiculos(
             
         # Pre-calc client cities if needed
         ciudades_cliente = []
-        if cliente_id:
-             ciudades_cliente = [normalize_str(s) for s in get_expected_sedes(cliente_id)]
+        if c_name:
+             ciudades_cliente = [normalize_str(s) for s in get_expected_sedes(c_name)]
+        
+        if c_name:
+             ciudades_cliente = [normalize_str(s) for s in get_expected_sedes(c_name)]
 
         vehiculos: list[Vehiculo] = []
         ciudad_norm = normalize_str(ciudad) if ciudad else ""
