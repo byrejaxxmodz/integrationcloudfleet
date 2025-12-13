@@ -519,6 +519,9 @@
 
         async function cargarSedes(clienteId) {
             const selSede = document.getElementById('selSede');
+            const clienteSelect = document.getElementById('selCliente');
+            const clienteName = clienteSelect.options[clienteSelect.selectedIndex]?.text || "";
+
             selSede.innerHTML = '<option value="">Cargando...</option>';
             selSede.disabled = true;
 
@@ -543,16 +546,51 @@
                     throw new Error("Formato de respuesta inválido (se esperaba lista)");
                 }
 
+                // Determine Valid Cities from QUOTA_TABLE if possible
+                let validCities = null;
+                for (const key of Object.keys(QUOTA_TABLE)) {
+                    if (clienteName.includes(key)) {
+                        validCities = Object.keys(QUOTA_TABLE[key]).map(k => normalizeCity(k));
+                        break;
+                    }
+                }
+
                 selSede.innerHTML = '<option value="">Todas las Sedes</option>';
+
+                let countAdded = 0;
                 sedes.forEach(s => {
-                    const opt = document.createElement('option');
                     const nombre = s.nombre || s.ciudad || "Sede sin nombre";
-                    // Usamos ID si existe, o el nombre de la ciudad como fallback para filtros locales
+                    const ciudadUnnorm = s.ciudad || "";
+                    const ciudadNorm = normalizeCity(ciudadUnnorm);
+
+                    // Filter if we have strict rules for this client
+                    // If the city is NOT in the allowed list, skip it?
+                    // User said: "CHILCO NO TIENE BOGOTA".
+                    // The API might be returning "Bogota" because of dirty data.
+                    // We only show it if it matches the TABLE, OR if we strictly want to follow the table.
+                    // Let's filter solely based on the table if table exists.
+
+                    if (validCities && validCities.length > 0) {
+                        // Check if this sede's city is in the valid list
+                        // Using fuzzy check just in case
+                        const isValid = validCities.some(v => v === ciudadNorm || ciudadNorm.includes(v) || v.includes(ciudadNorm));
+                        if (!isValid) return;
+                    }
+
+                    const opt = document.createElement('option');
                     opt.value = s.id || s.ciudad;
                     opt.textContent = nombre;
-                    opt.dataset.ciudad = s.ciudad || "";
+                    opt.dataset.ciudad = ciudadUnnorm;
                     selSede.appendChild(opt);
+                    countAdded++;
                 });
+
+                // Fallback: If filtered list is empty but API returned stuff, maybe allow all?
+                // Or just show nothing? User wants strictness.
+                if (countAdded === 0 && sedes.length > 0 && validCities) {
+                    console.warn("Client has sedes but none matched the strict QUOTA_TABLE rules.");
+                }
+
                 selSede.disabled = false;
             } catch (e) {
                 console.error("Error cargando sedes:", e);
