@@ -286,14 +286,14 @@ def get_sede(sede_id: str) -> dict[str, Any]:
 
 
 @ttl_lru_cache(seconds=300)
-def get_rutas(cliente_id: str | None = None) -> list[dict[str, Any]]:
+def get_rutas(cliente_id: str | None = None, max_pages: int | None = None) -> list[dict[str, Any]]:
     """
     Obtiene listado de rutas.
     Si se proporciona customer_id, filtra por cliente.
     Endpoint: /routes or /routes?customerId={customerId}
     """
     path = f"routes?customerId={quote(str(cliente_id))}" if cliente_id else "routes"
-    return _get_paginated(path)
+    return _get_paginated(path, max_pages=max_pages)
 
 
 @ttl_lru_cache(seconds=300)
