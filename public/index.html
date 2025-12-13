@@ -528,8 +528,6 @@
                 cargarDatos();
             });
 
-            // Removed City and Cost Center listeners
-
             await cargarClientes();
             await cargarDatos();
         }
@@ -592,7 +590,6 @@
         async function cargarDatos() {
             setLoading(true);
             const clienteId = document.getElementById('filterCliente').value;
-            // Removed filterCiudad and filterCentroCosto
             const sedeId = document.getElementById('filterSede').value;
             const rol = document.getElementById('filterRol').value;
             soloActivos = document.getElementById('filterSoloActivos').checked;
@@ -603,8 +600,6 @@
                     cargarVehiculos({ clienteId, sedeId }),
                     cargarPersonal({ clienteId, sedeId, rol, soloActivos }),
                 ]);
-
-                // Removed poblarCentrosCosto
 
                 actualizarEstadisticas();
             } finally {
@@ -1114,9 +1109,7 @@
 
         async function limpiarFiltros() {
             document.getElementById('filterCliente').value = '';
-            // Removed filterCiudad cleanup
             document.getElementById('filterSede').innerHTML = '<option value="">Todas las sedes</option>';
-            // Removed filterCentroCosto cleanup
             document.getElementById('filterRol').value = '';
             document.getElementById('filterSoloActivos').checked = true;
 

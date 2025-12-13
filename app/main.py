@@ -55,8 +55,7 @@ TRAVELS_MAX_PAGES = int(os.getenv("TRAVELS_MAX_PAGES", "20"))
 # Dias hacia atras para el rango por defecto en travels (fecha de creacion)
 TRAVELS_RANGE_DAYS = int(os.getenv("TRAVELS_RANGE_DAYS", "30"))
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("cloudfleet")
+
 
 app = FastAPI(
     title="CloudFleet Manager API",
@@ -82,16 +81,7 @@ def startup():
     except Exception as e:
         logger.warning(f"DB Connection failed on startup: {e}")
 
-@app.get("/debug_env")
-def debug_env():
-    """Endpoint temporal para verificar variables de entorno"""
-    url = os.getenv("CLOUDFLEET_API_URL", "")
-    token = os.getenv("CLOUDFLEET_API_TOKEN", "")
-    return {
-        "CLOUDFLEET_API_URL": url if url else "NOT_SET",
-        "CLOUDFLEET_API_TOKEN": f"{token[:5]}...{token[-5:]}" if len(token) > 10 else "NOT_SET_OR_SHORT",
-        "IS_CONFIGURED": bool(url and token)
-    }
+
 
 
 
