@@ -474,49 +474,7 @@
 
         </div>
 
-        <div class="trip-section">
-            <h2>Crear Viaje (CloudFleet)</h2>
-            <div class="trip-select">
-                <label for="tripFecha">Fecha</label>
-                <input type="date" id="tripFecha">
-            </div>
-            <div class="trip-select">
-                <label for="tripCliente">Cliente</label>
-                <select id="tripCliente"></select>
-            </div>
-            <div class="trip-select">
-                <label for="tripCiudad">Ciudad</label>
-                <input type="text" id="tripCiudad" placeholder="Ej: Bogota">
-            </div>
-            <div class="trip-select">
-                <label for="tripVehiculo">Vehiculo</label>
-                <select id="tripVehiculo"></select>
-            </div>
-            <div class="trip-select">
-                <label for="tripRuta">Ruta</label>
-                <select id="tripRuta"></select>
-            </div>
-            <div class="trip-select">
-                <label for="tripVia">Via</label>
-                <select id="tripVia"></select>
-            </div>
-            <div class="trip-select">
-                <label for="tripConductor">Conductor</label>
-                <select id="tripConductor"></select>
-            </div>
-            <div class="trip-select">
-                <label for="tripAuxiliar">Auxiliar</label>
-                <select id="tripAuxiliar"></select>
-            </div>
-            <div class="actions">
-                <button id="tripBuscarBtn" onclick="buscarDesdeTrip()">Buscar Recursos</button>
-                <button id="btnGuardarViaje" onclick="guardarViaje()">Confirmar y Crear Viaje</button>
-                <button class="secondary" onclick="limpiarFiltros()">Limpiar</button>
-            </div>
-            <div class="trip-summary" id="tripSummary">
-                Selecciona los datos y pulsa "Confirmar" para crear el viaje en base de datos.
-            </div>
-        </div>
+
     </div>
 
     <script>
@@ -526,24 +484,7 @@
         let personalData = [];
         let rutasData = [];
         let soloActivos = true;
-        let isLoading = false;
-        let rutasDataFull = [];
-        let vehiculosDataTrip = [];
-        let personalDataTrip = [];
-        let rutasDataTrip = [];
-        const tripState = {
-            clienteId: '',
-            ciudad: '',
-            vehiculoId: '',
-            rutaCodigo: '',
-            viaCode: '',
-            conductorId: '',
-            auxiliarId: ''
-        };
-        let tripLoading = false;
-        let tripAbortController = null;
-        let tripSyncTimeout = null;
-        let tripFiltersSyncing = false;
+
 
         function setLoading(flag) {
             isLoading = flag;
@@ -605,51 +546,33 @@
             // Por consistencia con lo anterior, solia tener un listener. Lo quitamos para evitar spam.
 
             await cargarClientes();
-            inicializarTripSelectors();
-            document.getElementById('tripFecha').valueAsDate = new Date();
 
             await cargarDatos();
         }
 
         async function cargarClientes() {
             const select = document.getElementById('filterCliente');
-            const tripSelect = document.getElementById('tripCliente');
             try {
                 const response = await fetch(`${API_BASE}/clientes`);
                 if (!response.ok) throw new Error('No se pudieron cargar los clientes');
                 clientesData = await response.json();
 
                 select.innerHTML = '';
-                tripSelect.innerHTML = '';
                 const optionAll = document.createElement('option');
                 optionAll.value = '';
                 optionAll.textContent = 'Todos los clientes';
                 select.appendChild(optionAll);
-
-                const tripOptionAll = document.createElement('option');
-                tripOptionAll.value = '';
-                tripOptionAll.textContent = 'Selecciona cliente';
-                tripSelect.appendChild(tripOptionAll);
 
                 clientesData.forEach((c) => {
                     const opt = document.createElement('option');
                     opt.value = c.id;
                     opt.textContent = c.nombre || `Cliente ${c.id}`;
                     select.appendChild(opt);
-
-                    const optTrip = document.createElement('option');
-                    optTrip.value = c.id;
-                    optTrip.textContent = c.nombre || `Cliente ${c.id}`;
-                    tripSelect.appendChild(optTrip);
                 });
 
-                if (tripState.clienteId) {
-                    tripSelect.value = tripState.clienteId;
-                }
             } catch (error) {
                 console.error(error);
                 select.innerHTML = '<option value=\"\">Error al cargar clientes</option>';
-                tripSelect.innerHTML = '<option value=\"\">Error al cargar clientes</option>';
             }
         }
 
@@ -678,83 +601,7 @@
             }
         }
 
-        function inicializarTripSelectors() {
-            const tripCliente = document.getElementById('tripCliente');
-            const tripCiudad = document.getElementById('tripCiudad');
-            const tripVehiculo = document.getElementById('tripVehiculo');
-            const tripRuta = document.getElementById('tripRuta');
-            const tripVia = document.getElementById('tripVia');
-            const tripConductor = document.getElementById('tripConductor');
-            const tripAuxiliar = document.getElementById('tripAuxiliar');
 
-            tripCliente.addEventListener('change', e => { tripState.clienteId = e.target.value; actualizarTripOptions(); });
-            tripCiudad.addEventListener('input', e => { tripState.ciudad = e.target.value.trim(); actualizarTripOptions(); });
-            tripVehiculo.addEventListener('change', e => { tripState.vehiculoId = e.target.value; actualizarTripSummary(); });
-            tripRuta.addEventListener('change', e => {
-                tripState.rutaCodigo = e.target.value;
-                tripState.viaCode = '';
-                poblarVias();
-                actualizarTripSummary();
-            });
-            tripVia.addEventListener('change', e => { tripState.viaCode = e.target.value; actualizarTripSummary(); });
-            tripConductor.addEventListener('change', e => { tripState.conductorId = e.target.value; actualizarTripSummary(); });
-            tripAuxiliar.addEventListener('change', e => { tripState.auxiliarId = e.target.value; actualizarTripSummary(); });
-
-            // Sincronizar con filtros existentes
-            tripCliente.addEventListener('change', () => { cargarDatosTripDebounced(); aplicarFiltrosDesdeTripDebounced(); });
-            tripCiudad.addEventListener('input', () => { cargarDatosTripDebounced(); aplicarFiltrosDesdeTripDebounced(); });
-            tripRuta.addEventListener('change', () => { cargarDatosTripDebounced(); aplicarFiltrosDesdeTripDebounced(); });
-            tripVia.addEventListener('change', () => { cargarDatosTripDebounced(); aplicarFiltrosDesdeTripDebounced(); });
-        }
-
-        function syncTripInputsFromState() {
-            document.getElementById('tripCliente').value = tripState.clienteId || '';
-            document.getElementById('tripCiudad').value = tripState.ciudad || '';
-        }
-
-        function aplicarFiltrosDesdeTripDebounced() {
-            clearTimeout(tripSyncTimeout);
-            tripSyncTimeout = setTimeout(aplicarFiltrosDesdeTrip, 300);
-        }
-
-        function aplicarFiltrosDesdeTrip() {
-            if (tripFiltersSyncing) return;
-            tripFiltersSyncing = true;
-            const filterCliente = document.getElementById('filterCliente');
-            const filterCiudad = document.getElementById('filterCiudad');
-            const filterRoute = document.getElementById('filterRouteCode');
-            const filterVia = document.getElementById('filterViaCode');
-
-            filterCliente.value = tripState.clienteId || '';
-            filterCiudad.value = tripState.ciudad || '';
-            filterRoute.value = tripState.rutaCodigo || '';
-            filterVia.value = tripState.viaCode || '';
-
-            aplicarFiltros().finally(() => {
-                tripFiltersSyncing = false;
-            });
-        }
-
-        async function buscarDesdeTrip() {
-            // Sincroniza filtros con el armador y usa una sola llamada al backend
-            const filterCliente = document.getElementById('filterCliente');
-            const filterCiudad = document.getElementById('filterCiudad');
-            const filterRoute = document.getElementById('filterRouteCode');
-            const filterVia = document.getElementById('filterViaCode');
-
-            filterCliente.value = tripState.clienteId || '';
-            filterCiudad.value = tripState.ciudad || '';
-            filterRoute.value = tripState.rutaCodigo || '';
-            filterVia.value = tripState.viaCode || '';
-
-            await aplicarFiltros();
-            // Reutiliza los datos ya cargados en tablas para el armador
-            vehiculosDataTrip = vehiculosData;
-            personalDataTrip = personalData;
-            rutasDataTrip = rutasDataFull.length ? rutasDataFull : rutasData;
-            actualizarTripOptions();
-            actualizarTripSummary();
-        }
 
         let sedesData = [];
 
